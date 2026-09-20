@@ -22,6 +22,7 @@
  */
 
 import { readFileSync, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
 const BUCKET = "life-os";
@@ -121,6 +122,10 @@ async function baixarMidia(url) {
   return { buffer, contentType };
 }
 
+function hashDoArquivo(buffer) {
+  return createHash("sha256").update(buffer).digest("hex");
+}
+
 async function main() {
   const { data: usuario, error: erroUsuario } = await supabase.auth.admin
     .listUsers({ page: 1, perPage: 200 })
@@ -144,9 +149,10 @@ async function main() {
 
   const { data: existentes } = await supabase
     .from("memes")
-    .select("link_origem")
+    .select("link_origem, midia_hash")
     .eq("user_id", userId);
   const linksJaImportados = new Set((existentes ?? []).map((m) => (m.link_origem ?? "").split("?")[0]));
+  const hashesJaImportados = new Set((existentes ?? []).map((m) => m.midia_hash).filter(Boolean));
 
   let sucesso = 0;
   let pulados = 0;
@@ -173,6 +179,13 @@ async function main() {
     try {
       const info = await buscarInfoDoPost(id);
       const { buffer, contentType } = await baixarMidia(info.midiaUrl);
+      const hash = hashDoArquivo(buffer);
+
+      if (hashesJaImportados.has(hash)) {
+        console.log(`${prefixo} vídeo/imagem já existe no acervo (outro link, mesmo arquivo), pulando: ${link}`);
+        pulados++;
+        continue;
+      }
 
       const extensao = info.tipo === "video" ? "mp4" : "jpg";
       const caminho = `${userId}/${PASTA}/${Date.now()}-${Math.random().toString(36).slice(2)}.${extensao}`;
@@ -189,9 +202,11 @@ async function main() {
         link_origem: link,
         explicacao: "",
         tags: info.autor ? [info.autor.toLowerCase()] : [],
+        midia_hash: hash,
       });
       if (erroInsert) throw erroInsert;
 
+      hashesJaImportados.add(hash);
       console.log(`${prefixo} importado: ${info.texto.slice(0, 60) || "(sem texto)"}`);
       sucesso++;
     } catch (erro) {
