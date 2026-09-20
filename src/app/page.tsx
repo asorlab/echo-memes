@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, Trash2, Image as ImageIcon, ExternalLink, Sparkles, Search } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Plus, Trash2, Image as ImageIcon, ExternalLink, Sparkles, Search, Download, Loader2 } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useUser } from "@/lib/useUser";
 import { useToast } from "@/components/ToastProvider";
@@ -44,6 +44,8 @@ export default function MemesPage() {
   const [enviandoId, setEnviandoId] = useState<string | null>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [imagensQuebradas, setImagensQuebradas] = useState<Set<string>>(new Set());
+  const [linkImportar, setLinkImportar] = useState("");
+  const [importando, setImportando] = useState(false);
 
   const primeiraCarga = useRef(true);
   const carregar = useCallback(async () => {
@@ -96,6 +98,43 @@ export default function MemesPage() {
     }
   }
 
+  async function importarDoX(e: FormEvent) {
+    e.preventDefault();
+    if (!user || !linkImportar.trim() || importando) return;
+    setImportando(true);
+    try {
+      const respostaInfo = await fetch(`/api/x-import?url=${encodeURIComponent(linkImportar.trim())}`);
+      const info = await respostaInfo.json();
+      if (!respostaInfo.ok) { toast(info.erro ?? "Não consegui importar esse link"); return; }
+
+      const respostaMidia = await fetch(`/api/x-media?url=${encodeURIComponent(info.midiaUrl)}`);
+      if (!respostaMidia.ok) { toast("Não consegui baixar a mídia desse post"); return; }
+      const blob = await respostaMidia.blob();
+      const extensao = info.tipo === "video" ? "mp4" : "jpg";
+      const arquivo = new File([blob], `x-import.${extensao}`, { type: blob.type });
+
+      const urlArquivo = await enviarArquivo("memes", user.id, arquivo);
+      const supabase = supabaseBrowser();
+      const { error } = await supabase.from("memes").insert({
+        user_id: user.id,
+        titulo: info.texto ? info.texto.slice(0, 80) : "Novo meme",
+        imagem_url: urlArquivo,
+        link_origem: linkImportar.trim(),
+        explicacao: "",
+        tags: info.autor ? [info.autor.toLowerCase()] : [],
+      });
+      if (error) { toast("Erro ao salvar o meme"); return; }
+
+      toast("Meme importado — falta só escrever o \"por que funciona\"");
+      setLinkImportar("");
+      carregar();
+    } catch {
+      toast("Erro ao importar esse link");
+    } finally {
+      setImportando(false);
+    }
+  }
+
   const todasAsTags = Array.from(new Set(memes.flatMap((m) => m.tags))).sort();
   const filtrados = memes.filter((m) => {
     if (tagAtiva && !m.tags.includes(tagAtiva)) return false;
@@ -115,6 +154,26 @@ export default function MemesPage() {
           </button>
         }
       />
+
+      <Card className="mb-4 p-4">
+        <form onSubmit={importarDoX} className="flex flex-col gap-2 sm:flex-row">
+          <input
+            value={linkImportar}
+            onChange={(e) => setLinkImportar(e.target.value)}
+            placeholder="Cola o link de um post do X (x.com/.../status/...)"
+            className="min-h-[40px] flex-1 rounded-md border border-neutral-800 bg-neutral-950 px-3 text-sm text-neutral-100 placeholder-neutral-600 outline-none focus:border-teal-500/40"
+          />
+          <button
+            type="submit"
+            disabled={!linkImportar.trim() || importando}
+            className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-md bg-teal-500 px-4 text-xs font-medium text-neutral-950 hover:opacity-90 disabled:opacity-40"
+          >
+            {importando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+            {importando ? "Importando..." : "Importar do X"}
+          </button>
+        </form>
+        <p className="mt-2 text-[11px] text-neutral-600">Baixa a imagem/vídeo do post direto do X e já cria o card — só falta você escrever o &quot;por que funciona&quot;.</p>
+      </Card>
 
       <div className="mb-4 flex items-center gap-2 rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2">
         <Search className="h-4 w-4 shrink-0 text-neutral-500" />
