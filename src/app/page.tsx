@@ -17,6 +17,12 @@ interface MemeRow {
   link_origem: string | null; explicacao: string; tags: string[]; created_at: string;
 }
 
+const EXTENSOES_VIDEO = [".mp4", ".webm", ".mov", ".m4v"];
+function ehVideo(url: string): boolean {
+  const semQuery = url.split("?")[0].toLowerCase();
+  return EXTENSOES_VIDEO.some((ext) => semQuery.endsWith(ext));
+}
+
 function mapMeme(r: MemeRow): Meme {
   return { id: r.id, titulo: r.titulo, imagemUrl: r.imagem_url, linkOrigem: r.link_origem, explicacao: r.explicacao, tags: r.tags ?? [], criadoEm: r.created_at };
 }
@@ -152,30 +158,49 @@ export default function MemesPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtrados.map((m) => (
             <Card key={m.id} className="overflow-hidden p-0">
-              <button
-                onClick={() => fileInputRefs.current[m.id]?.click()}
-                className="relative flex aspect-square w-full items-center justify-center bg-neutral-900"
-              >
+              <div className="relative flex aspect-square w-full items-center justify-center bg-neutral-900">
                 {m.imagemUrl && !imagensQuebradas.has(m.imagemUrl) ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={m.imagemUrl}
-                    alt=""
-                    className="h-full w-full object-cover"
-                    onError={() => setImagensQuebradas((atual) => new Set(atual).add(m.imagemUrl!))}
-                  />
+                  <>
+                    {ehVideo(m.imagemUrl) ? (
+                      <video
+                        src={m.imagemUrl}
+                        className="h-full w-full object-cover"
+                        controls
+                        playsInline
+                        onError={() => setImagensQuebradas((atual) => new Set(atual).add(m.imagemUrl!))}
+                      />
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={m.imagemUrl}
+                        alt=""
+                        className="h-full w-full object-cover"
+                        onError={() => setImagensQuebradas((atual) => new Set(atual).add(m.imagemUrl!))}
+                      />
+                    )}
+                    <button
+                      onClick={() => fileInputRefs.current[m.id]?.click()}
+                      title="Trocar arquivo"
+                      className="absolute right-1.5 top-1.5 rounded-md border border-neutral-700/60 bg-neutral-950/80 px-2 py-1 text-[10px] text-neutral-300 backdrop-blur-sm hover:border-teal-500/60 hover:text-teal-300"
+                    >
+                      Trocar
+                    </button>
+                  </>
                 ) : (
-                  <div className="flex flex-col items-center gap-1.5 text-neutral-700">
+                  <button
+                    onClick={() => fileInputRefs.current[m.id]?.click()}
+                    className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-neutral-700"
+                  >
                     <ImageIcon className="h-6 w-6" />
-                    <span className="text-[10px]">Clique pra enviar imagem</span>
-                  </div>
+                    <span className="text-[10px]">Clique pra enviar imagem ou vídeo</span>
+                  </button>
                 )}
                 {enviandoId === m.id && <span className="absolute inset-0 flex items-center justify-center bg-black/60 text-[10px] text-neutral-300">Enviando...</span>}
-              </button>
+              </div>
               <input
                 ref={(el) => { fileInputRefs.current[m.id] = el; }}
                 type="file"
-                accept="image/*"
+                accept="image/*,video/*"
                 className="hidden"
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) enviarImagem(m.id, f); e.target.value = ""; }}
               />
