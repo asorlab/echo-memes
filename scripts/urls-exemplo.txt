@@ -1,0 +1,4 @@
+# Um link de post do X por linha. Linhas comecando com # sao ignoradas.
+# Apague essas linhas de exemplo e cole os links de verdade.
+https://x.com/julyameixa/status/2101722637147779329
+https://x.com/MICH5EL/status/2101444883764453829
