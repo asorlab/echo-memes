@@ -10,12 +10,20 @@ import Card from "@/components/ui/Card";
 import PageHeader from "@/components/ui/PageHeader";
 import EmptyState from "@/components/ui/EmptyState";
 import EditableField from "@/components/ui/EditableField";
-import type { Meme } from "@/lib/types";
+import type { Categoria, Meme } from "@/lib/types";
 
 interface MemeRow {
   id: string; user_id: string; titulo: string; imagem_url: string | null;
   link_origem: string | null; explicacao: string; tags: string[]; created_at: string;
+  plataforma: string | null; criador: string | null; categoria: Categoria | null; publicado_em: string | null;
 }
+
+const CATEGORIAS: { id: Categoria; rotulo: string }[] = [
+  { id: "iveasor", rotulo: "IveAsor" },
+  { id: "asor", rotulo: "ASOR.lab" },
+  { id: "aivil", rotulo: "AIVIL" },
+  { id: "geral", rotulo: "Geral" },
+];
 
 const EXTENSOES_VIDEO = [".mp4", ".webm", ".mov", ".m4v"];
 function ehVideo(url: string): boolean {
@@ -24,7 +32,11 @@ function ehVideo(url: string): boolean {
 }
 
 function mapMeme(r: MemeRow): Meme {
-  return { id: r.id, titulo: r.titulo, imagemUrl: r.imagem_url, linkOrigem: r.link_origem, explicacao: r.explicacao, tags: r.tags ?? [], criadoEm: r.created_at };
+  return {
+    id: r.id, titulo: r.titulo, imagemUrl: r.imagem_url, linkOrigem: r.link_origem, explicacao: r.explicacao,
+    tags: r.tags ?? [], criadoEm: r.created_at, plataforma: r.plataforma, criador: r.criador,
+    categoria: r.categoria, publicadoEm: r.publicado_em,
+  };
 }
 
 function paraListaDeTags(valor: string): string[] {
@@ -70,7 +82,7 @@ export default function MemesPage() {
     carregar();
   }
 
-  async function atualizar(id: string, patch: Partial<{ titulo: string; imagem_url: string | null; link_origem: string | null; explicacao: string; tags: string[] }>) {
+  async function atualizar(id: string, patch: Partial<{ titulo: string; imagem_url: string | null; link_origem: string | null; explicacao: string; tags: string[]; criador: string | null; categoria: Categoria | null }>) {
     const supabase = supabaseBrowser();
     const { error } = await supabase.from("memes").update(patch).eq("id", id);
     if (error) { toast("Erro ao salvar"); return; }
@@ -122,6 +134,8 @@ export default function MemesPage() {
         link_origem: linkImportar.trim(),
         explicacao: "",
         tags: info.autor ? [info.autor.toLowerCase()] : [],
+        plataforma: "x",
+        criador: info.autor || null,
       });
       if (error) { toast("Erro ao salvar o meme"); return; }
 
@@ -266,6 +280,30 @@ export default function MemesPage() {
 
               <div className="space-y-2 p-3.5">
                 <EditableField value={m.titulo} onSave={(v) => atualizar(m.id, { titulo: v })} displayClassName="text-sm font-semibold text-neutral-100" />
+
+                <div className="flex items-center gap-1.5">
+                  <select
+                    value={m.categoria ?? ""}
+                    onChange={(e) => atualizar(m.id, { categoria: (e.target.value || null) as Categoria | null })}
+                    className="min-h-[26px] rounded-md border border-neutral-800 bg-neutral-900 px-1.5 text-[10px] text-neutral-400 outline-none focus:border-teal-500/40"
+                  >
+                    <option value="">Sem categoria</option>
+                    {CATEGORIAS.map((c) => <option key={c.id} value={c.id}>{c.rotulo}</option>)}
+                  </select>
+                  {m.plataforma && (
+                    <span className="rounded-full border border-neutral-800 px-2 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500">{m.plataforma}</span>
+                  )}
+                </div>
+
+                <div>
+                  <p className="text-[9px] uppercase tracking-wide text-neutral-700">Criador</p>
+                  <EditableField
+                    value={m.criador ?? ""}
+                    placeholder="@quem postou"
+                    onSave={(v) => atualizar(m.id, { criador: v || null })}
+                    displayClassName="text-[11px] text-neutral-400"
+                  />
+                </div>
 
                 <div>
                   <p className="text-[9px] uppercase tracking-wide text-neutral-700">Por que funciona</p>
