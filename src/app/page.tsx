@@ -1,12 +1,14 @@
 "use client";
+import ImportarPerfil from "@/components/memes/ImportarPerfil";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Plus, Trash2, Image as ImageIcon, ExternalLink, Sparkles, Search, Download, Loader2 } from "lucide-react";
+import { Plus, Trash2, Image as ImageIcon, ExternalLink, Sparkles, Search, Download, Loader2, Link2, PencilLine, ChevronDown, Rss } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useUser } from "@/lib/useUser";
 import { useToast } from "@/components/ToastProvider";
 import { enviarArquivo } from "@/lib/storage";
 import Card from "@/components/ui/Card";
+import Modal from "@/components/ui/Modal";
 import PageHeader from "@/components/ui/PageHeader";
 import EmptyState from "@/components/ui/EmptyState";
 import EditableField from "@/components/ui/EditableField";
@@ -46,6 +48,28 @@ function paraTextoDeTags(lista: string[]): string {
   return lista.join(", ");
 }
 
+// Alguns imports gravam o id numerico interno do autor em vez do @usuario
+// (quando a plataforma de origem nao devolve um nome legivel). Isso nunca
+// deve aparecer como tag/criador na tela — mas o dado em si fica intacto
+// no banco, so a exibicao filtra.
+function ehIdentificadorNumerico(valor: string): boolean {
+  return /^\d{5,}$/.test(valor.trim());
+}
+function formatarCriador(valor: string): string {
+  return ehIdentificadorNumerico(valor) ? "" : valor;
+}
+function formatarTags(valor: string): string {
+  return valor
+    .split(",")
+    .map((v) => v.trim())
+    .filter((v) => v && !ehIdentificadorNumerico(v))
+    .join(", ");
+}
+
+const LIMITE_TAGS_VISIVEIS = 10;
+
+type AbaAdicionar = "tiktok" | "x" | "manual";
+
 export default function MemesPage() {
   const { user } = useUser();
   const toast = useToast();
@@ -53,11 +77,14 @@ export default function MemesPage() {
   const [carregando, setCarregando] = useState(true);
   const [busca, setBusca] = useState("");
   const [tagAtiva, setTagAtiva] = useState<string | null>(null);
+  const [todasTagsVisiveis, setTodasTagsVisiveis] = useState(false);
   const [enviandoId, setEnviandoId] = useState<string | null>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [imagensQuebradas, setImagensQuebradas] = useState<Set<string>>(new Set());
   const [linkImportar, setLinkImportar] = useState("");
   const [importando, setImportando] = useState(false);
+  const [modalAberto, setModalAberto] = useState(false);
+  const [abaAdicionar, setAbaAdicionar] = useState<AbaAdicionar>("tiktok");
 
   const primeiraCarga = useRef(true);
   const carregar = useCallback(async () => {
@@ -79,6 +106,7 @@ export default function MemesPage() {
     const supabase = supabaseBrowser();
     const { error } = await supabase.from("memes").insert({ user_id: user.id, titulo: "Novo meme", explicacao: "" });
     if (error) { toast("Erro ao criar"); return; }
+    setModalAberto(false);
     carregar();
   }
 
@@ -141,6 +169,7 @@ export default function MemesPage() {
 
       toast("Meme importado — falta só escrever o \"por que funciona\"");
       setLinkImportar("");
+      setModalAberto(false);
       carregar();
     } catch {
       toast("Erro ao importar esse link");
@@ -149,7 +178,10 @@ export default function MemesPage() {
     }
   }
 
-  const todasAsTags = Array.from(new Set(memes.flatMap((m) => m.tags))).sort();
+  const todasAsTags = Array.from(new Set(memes.flatMap((m) => m.tags)))
+    .filter((t) => !ehIdentificadorNumerico(t))
+    .sort();
+  const tagsParaMostrar = todasTagsVisiveis ? todasAsTags : todasAsTags.slice(0, LIMITE_TAGS_VISIVEIS);
   const filtrados = memes.filter((m) => {
     if (tagAtiva && !m.tags.includes(tagAtiva)) return false;
     if (!busca.trim()) return true;
@@ -163,33 +195,69 @@ export default function MemesPage() {
         titulo="Memes"
         descricao="Cada meme, de onde veio e por que funciona."
         acao={
-          <button onClick={adicionar} className="flex min-h-[44px] items-center gap-2 rounded-md bg-teal-500 px-4 text-sm font-medium text-neutral-950 hover:opacity-90">
-            <Plus className="h-4 w-4" /> Novo meme
+          <button
+            onClick={() => { setAbaAdicionar("tiktok"); setModalAberto(true); }}
+            className="flex min-h-[44px] items-center gap-2 rounded-md bg-teal-500 px-4 text-sm font-medium text-neutral-950 hover:opacity-90"
+          >
+            <Plus className="h-4 w-4" /> Adicionar
           </button>
         }
       />
 
-      <Card className="mb-4 p-4">
-        <form onSubmit={importarDoX} className="flex flex-col gap-2 sm:flex-row">
-          <input
-            value={linkImportar}
-            onChange={(e) => setLinkImportar(e.target.value)}
-            placeholder="Cola o link de um post do X (x.com/.../status/...)"
-            className="min-h-[40px] flex-1 rounded-md border border-neutral-800 bg-neutral-950 px-3 text-sm text-neutral-100 placeholder-neutral-600 outline-none focus:border-teal-500/40"
-          />
+      <Modal titulo="Adicionar referência" aberto={modalAberto} onFechar={() => setModalAberto(false)}>
+        <div className="mb-3 flex gap-1 rounded-md bg-neutral-900 p-0.5">
           <button
-            type="submit"
-            disabled={!linkImportar.trim() || importando}
-            className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-md bg-teal-500 px-4 text-xs font-medium text-neutral-950 hover:opacity-90 disabled:opacity-40"
+            onClick={() => setAbaAdicionar("tiktok")}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition ${abaAdicionar === "tiktok" ? "bg-neutral-800 text-neutral-100" : "text-neutral-500 hover:text-neutral-300"}`}
           >
-            {importando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-            {importando ? "Importando..." : "Importar do X"}
+            <Rss className="h-3.5 w-3.5" /> TikTok
           </button>
-        </form>
-        <p className="mt-2 text-[11px] text-neutral-600">Baixa a imagem/vídeo do post direto do X e já cria o card — só falta você escrever o &quot;por que funciona&quot;.</p>
-      </Card>
+          <button
+            onClick={() => setAbaAdicionar("x")}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition ${abaAdicionar === "x" ? "bg-neutral-800 text-neutral-100" : "text-neutral-500 hover:text-neutral-300"}`}
+          >
+            <Link2 className="h-3.5 w-3.5" /> X
+          </button>
+          <button
+            onClick={() => setAbaAdicionar("manual")}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition ${abaAdicionar === "manual" ? "bg-neutral-800 text-neutral-100" : "text-neutral-500 hover:text-neutral-300"}`}
+          >
+            <PencilLine className="h-3.5 w-3.5" /> Manual
+          </button>
+        </div>
 
-      <div className="mb-4 flex items-center gap-2 rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2">
+        {abaAdicionar === "tiktok" && <ImportarPerfil />}
+
+        {abaAdicionar === "x" && (
+          <form onSubmit={importarDoX} className="flex flex-col gap-2">
+            <input
+              value={linkImportar}
+              onChange={(e) => setLinkImportar(e.target.value)}
+              placeholder="Cola o link de um post do X (x.com/.../status/...)"
+              className="min-h-[38px] rounded-md border border-neutral-800 bg-neutral-950 px-3 text-sm text-neutral-100 placeholder-neutral-600 outline-none focus:border-teal-500/40"
+            />
+            <button
+              type="submit"
+              disabled={!linkImportar.trim() || importando}
+              className="flex min-h-[38px] items-center justify-center gap-1.5 rounded-md bg-teal-500 px-4 text-xs font-medium text-neutral-950 hover:opacity-90 disabled:opacity-40"
+            >
+              {importando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+              {importando ? "Importando..." : "Importar do X"}
+            </button>
+          </form>
+        )}
+
+        {abaAdicionar === "manual" && (
+          <button
+            onClick={adicionar}
+            className="flex min-h-[38px] w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-neutral-700 text-xs text-neutral-400 hover:border-teal-500/40 hover:text-teal-300"
+          >
+            <Plus className="h-3.5 w-3.5" /> Criar meme em branco e enviar arquivo
+          </button>
+        )}
+      </Modal>
+
+      <div className="mb-3 flex items-center gap-2 rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2">
         <Search className="h-4 w-4 shrink-0 text-neutral-500" />
         <input
           value={busca}
@@ -200,14 +268,14 @@ export default function MemesPage() {
       </div>
 
       {todasAsTags.length > 0 && (
-        <div className="mb-4 flex flex-wrap gap-1.5">
+        <div className="mb-4 flex flex-wrap items-center gap-1.5">
           <button
             onClick={() => setTagAtiva(null)}
             className={`rounded-full border px-2.5 py-1 text-[11px] font-mono ${!tagAtiva ? "border-teal-500/50 bg-teal-500/10 text-teal-300" : "border-neutral-800 text-neutral-500 hover:text-neutral-300"}`}
           >
             Todas
           </button>
-          {todasAsTags.map((t) => (
+          {tagsParaMostrar.map((t) => (
             <button
               key={t}
               onClick={() => setTagAtiva(t === tagAtiva ? null : t)}
@@ -216,6 +284,15 @@ export default function MemesPage() {
               #{t}
             </button>
           ))}
+          {todasAsTags.length > LIMITE_TAGS_VISIVEIS && (
+            <button
+              onClick={() => setTodasTagsVisiveis((v) => !v)}
+              className="flex items-center gap-0.5 px-1.5 py-1 text-[11px] text-neutral-600 hover:text-neutral-300"
+            >
+              {todasTagsVisiveis ? "menos" : `+${todasAsTags.length - LIMITE_TAGS_VISIVEIS}`}
+              <ChevronDown className={`h-3 w-3 transition-transform ${todasTagsVisiveis ? "rotate-180" : ""}`} />
+            </button>
+          )}
         </div>
       )}
 
@@ -225,19 +302,19 @@ export default function MemesPage() {
         <EmptyState
           icone={Sparkles}
           titulo={memes.length === 0 ? "Nenhum meme guardado ainda" : "Nenhum meme encontrado"}
-          descricao={memes.length === 0 ? "Clique em “Novo meme” pra começar o acervo." : "Tente buscar por outro termo ou tag."}
+          descricao={memes.length === 0 ? "Clique em “Adicionar” pra começar o acervo." : "Tente buscar por outro termo ou tag."}
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtrados.map((m) => (
             <Card key={m.id} className="overflow-hidden p-0">
-              <div className="relative flex aspect-square w-full items-center justify-center bg-neutral-900">
+              <div className="relative flex max-h-[320px] min-h-[180px] w-full items-center justify-center bg-neutral-950 sm:max-h-[380px]">
                 {m.imagemUrl && !imagensQuebradas.has(m.imagemUrl) ? (
                   <>
                     {ehVideo(m.imagemUrl) ? (
                       <video
                         src={m.imagemUrl}
-                        className="h-full w-full object-cover"
+                        className="max-h-[320px] w-full object-contain sm:max-h-[380px]"
                         controls
                         playsInline
                         onError={() => setImagensQuebradas((atual) => new Set(atual).add(m.imagemUrl!))}
@@ -247,7 +324,7 @@ export default function MemesPage() {
                       <img
                         src={m.imagemUrl}
                         alt=""
-                        className="h-full w-full object-cover"
+                        className="max-h-[320px] w-full object-contain sm:max-h-[380px]"
                         onError={() => setImagensQuebradas((atual) => new Set(atual).add(m.imagemUrl!))}
                       />
                     )}
@@ -262,13 +339,23 @@ export default function MemesPage() {
                 ) : (
                   <button
                     onClick={() => fileInputRefs.current[m.id]?.click()}
-                    className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-neutral-700"
+                    className="flex h-full min-h-[180px] w-full flex-col items-center justify-center gap-1.5 text-neutral-700"
                   >
                     <ImageIcon className="h-6 w-6" />
                     <span className="text-[10px]">Clique pra enviar imagem ou vídeo</span>
                   </button>
                 )}
                 {enviandoId === m.id && <span className="absolute inset-0 flex items-center justify-center bg-black/60 text-[10px] text-neutral-300">Enviando...</span>}
+                {(m.categoria || m.plataforma) && (
+                  <div className="pointer-events-none absolute left-1.5 top-1.5 flex gap-1">
+                    {m.plataforma && (
+                      <span className="rounded-full bg-neutral-950/80 px-2 py-0.5 text-[9px] uppercase tracking-wide text-neutral-400 backdrop-blur-sm">{m.plataforma}</span>
+                    )}
+                    {m.categoria && (
+                      <span className="rounded-full bg-neutral-950/80 px-2 py-0.5 text-[9px] uppercase tracking-wide text-teal-400/90 backdrop-blur-sm">{CATEGORIAS.find((c) => c.id === m.categoria)?.rotulo}</span>
+                    )}
+                  </div>
+                )}
               </div>
               <input
                 ref={(el) => { fileInputRefs.current[m.id] = el; }}
@@ -278,77 +365,55 @@ export default function MemesPage() {
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) enviarImagem(m.id, f); e.target.value = ""; }}
               />
 
-              <div className="space-y-2 p-3.5">
+              <div className="space-y-1.5 p-3">
                 <EditableField value={m.titulo} onSave={(v) => atualizar(m.id, { titulo: v })} displayClassName="text-sm font-semibold text-neutral-100" />
 
                 <div className="flex items-center gap-1.5">
                   <select
                     value={m.categoria ?? ""}
                     onChange={(e) => atualizar(m.id, { categoria: (e.target.value || null) as Categoria | null })}
-                    className="min-h-[26px] rounded-md border border-neutral-800 bg-neutral-900 px-1.5 text-[10px] text-neutral-400 outline-none focus:border-teal-500/40"
+                    className="min-h-[24px] rounded-md border border-neutral-800 bg-neutral-900 px-1.5 text-[10px] text-neutral-500 outline-none focus:border-teal-500/40"
                   >
                     <option value="">Sem categoria</option>
                     {CATEGORIAS.map((c) => <option key={c.id} value={c.id}>{c.rotulo}</option>)}
                   </select>
-                  {m.plataforma && (
-                    <span className="rounded-full border border-neutral-800 px-2 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500">{m.plataforma}</span>
-                  )}
-                </div>
-
-                <div>
-                  <p className="text-[9px] uppercase tracking-wide text-neutral-700">Criador</p>
                   <EditableField
                     value={m.criador ?? ""}
                     placeholder="@quem postou"
                     onSave={(v) => atualizar(m.id, { criador: v || null })}
-                    displayClassName="text-[11px] text-neutral-400"
+                    formatDisplay={formatarCriador}
+                    displayClassName="min-h-[24px] flex-1 px-1.5 py-0 text-[11px] text-neutral-500"
                   />
                 </div>
 
-                <div>
-                  <p className="text-[9px] uppercase tracking-wide text-neutral-700">Por que funciona</p>
-                  <EditableField
-                    as="textarea"
-                    value={m.explicacao}
-                    placeholder="Escreva por que esse meme pega…"
-                    onSave={(v) => atualizar(m.id, { explicacao: v })}
-                    displayClassName="text-xs leading-relaxed text-neutral-400"
-                  />
-                </div>
+                <EditableField
+                  as="textarea"
+                  value={m.explicacao}
+                  placeholder="Por que esse meme pega…"
+                  onSave={(v) => atualizar(m.id, { explicacao: v })}
+                  displayClassName="text-xs leading-relaxed text-neutral-400"
+                />
 
-                <div>
-                  <p className="text-[9px] uppercase tracking-wide text-neutral-700">Link de origem</p>
-                  <div className="flex items-center gap-1">
-                    <div className="min-w-0 flex-1">
-                      <EditableField
-                        value={m.linkOrigem ?? ""}
-                        placeholder="https://..."
-                        onSave={(v) => atualizar(m.id, { link_origem: v || null })}
-                        displayClassName="truncate text-[11px] text-neutral-500"
-                      />
-                    </div>
+                <div className="flex items-center justify-between gap-2 pt-0.5">
+                  <div className="min-w-0 flex-1">
+                    <EditableField
+                      value={paraTextoDeTags(m.tags)}
+                      placeholder="tags: anime, bbb, copa"
+                      onSave={(v) => atualizar(m.id, { tags: paraListaDeTags(v) })}
+                      formatDisplay={formatarTags}
+                      displayClassName="truncate text-[11px] text-teal-500/80"
+                    />
+                  </div>
+                  <div className="flex shrink-0 items-center gap-0.5">
                     {m.linkOrigem && (
-                      <a href={m.linkOrigem} target="_blank" rel="noreferrer" className="shrink-0 text-neutral-600 hover:text-teal-400">
-                        <ExternalLink className="h-3 w-3" />
+                      <a href={m.linkOrigem} target="_blank" rel="noreferrer" className="flex h-7 w-7 items-center justify-center text-neutral-600 hover:text-teal-400">
+                        <ExternalLink className="h-3.5 w-3.5" />
                       </a>
                     )}
+                    <button onClick={() => { if (window.confirm("Excluir este meme?")) excluir(m.id); }} className="flex h-7 w-7 items-center justify-center text-neutral-600 hover:text-[#F0997B]">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
-                </div>
-
-                <div>
-                  <p className="text-[9px] uppercase tracking-wide text-neutral-700">Tags</p>
-                  <EditableField
-                    value={paraTextoDeTags(m.tags)}
-                    placeholder="ex.: anime, bbb, copa"
-                    onSave={(v) => atualizar(m.id, { tags: paraListaDeTags(v) })}
-                    displayClassName="text-[11px] text-teal-500/80"
-                  />
-                </div>
-
-                <div className="flex justify-end pt-0.5">
-                  <button onClick={() => { if (window.confirm("Excluir este meme?")) excluir(m.id); }} className="flex h-7 w-7 items-center justify-center text-neutral-600 hover:text-[#F0997B]">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
                 </div>
               </div>
             </Card>
