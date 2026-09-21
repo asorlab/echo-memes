@@ -38,7 +38,6 @@ function carregarEnvLocal() {
       valor = valor.slice(1, -1);
     }
 
-    // Para este worker, o .env.local é a fonte de verdade.
     process.env[chave] = valor;
   }
 }
@@ -58,7 +57,7 @@ if (!SUPABASE_SECRET_KEY) {
 
 if (!SUPABASE_SECRET_KEY.startsWith("sb_secret_")) {
   throw new Error(
-    "SUPABASE_SECRET_KEY não parece ser uma Secret key válida (sb_secret_...)."
+    "SUPABASE_SECRET_KEY não parece ser uma Secret key válida (sb_secret_...).",
   );
 }
 
@@ -70,7 +69,7 @@ const supabase = createClient(
       persistSession: false,
       autoRefreshToken: false,
     },
-  }
+  },
 );
 
 const BUCKET = "life-os";
@@ -105,8 +104,8 @@ function executarYtDlp(argumentos) {
       if (codigo !== 0) {
         reject(
           new Error(
-            `yt-dlp terminou com código ${codigo}\n${stderr || stdout}`
-          )
+            `yt-dlp terminou com código ${codigo}\n${stderr || stdout}`,
+          ),
         );
         return;
       }
@@ -157,7 +156,7 @@ async function obterInfoVideo(url) {
 async function baixarVideo(url, externalId) {
   const base = path.join(
     os.tmpdir(),
-    `echo-${externalId}-${Date.now()}`
+    `echo-${externalId}-${Date.now()}`,
   );
 
   const arquivoFinal = `${base}.mp4`;
@@ -177,7 +176,7 @@ async function baixarVideo(url, externalId) {
 
   if (!existsSync(arquivoFinal)) {
     throw new Error(
-      `O yt-dlp terminou, mas o arquivo final não foi encontrado: ${arquivoFinal}`
+      `O yt-dlp terminou, mas o arquivo final não foi encontrado: ${arquivoFinal}`,
     );
   }
 
@@ -193,7 +192,7 @@ async function baixarVideo(url, externalId) {
 async function memeJaExiste(
   userId,
   plataforma,
-  externalId
+  externalId,
 ) {
   const { data, error } = await supabase
     .from("memes")
@@ -212,7 +211,7 @@ async function enviarParaStorage(
   userId,
   plataforma,
   externalId,
-  arquivo
+  arquivo,
 ) {
   const bytes = await readFile(arquivo);
 
@@ -238,8 +237,6 @@ async function enviarParaStorage(
     const mensagem =
       String(error.message || "").toLowerCase();
 
-    // Se o arquivo já estiver no Storage,
-    // reutilizamos o mesmo caminho.
     if (
       !mensagem.includes("already exists") &&
       !mensagem.includes("duplicate")
@@ -254,7 +251,7 @@ async function enviarParaStorage(
 
   if (!data?.publicUrl) {
     throw new Error(
-      `Não foi possível gerar a URL pública de ${caminho}.`
+      `Não foi possível gerar a URL pública de ${caminho}.`,
     );
   }
 
@@ -264,7 +261,7 @@ async function enviarParaStorage(
 function dataPublicacao(info) {
   if (info.timestamp) {
     return new Date(
-      info.timestamp * 1000
+      info.timestamp * 1000,
     ).toISOString();
   }
 
@@ -277,7 +274,7 @@ function dataPublicacao(info) {
     const dia = info.upload_date.slice(6, 8);
 
     return new Date(
-      `${ano}-${mes}-${dia}T00:00:00Z`
+      `${ano}-${mes}-${dia}T00:00:00Z`,
     ).toISOString();
   }
 
@@ -308,7 +305,7 @@ async function criarMeme({
     tags.push(
       String(criador)
         .replace(/^@/, "")
-        .toLowerCase()
+        .toLowerCase(),
     );
   }
 
@@ -363,6 +360,24 @@ async function buscarProximaTarefa() {
   return data;
 }
 
+async function obterStatusTarefa(id) {
+  const { data, error } = await supabase
+    .from("meme_import_queue")
+    .select("status")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  return data?.status ?? null;
+}
+
+async function tarefaFoiCancelada(id) {
+  const status = await obterStatusTarefa(id);
+
+  return status === "cancelled";
+}
+
 // --------------------------------------------------
 // IMPORTAÇÃO DE UM VÍDEO
 // --------------------------------------------------
@@ -371,7 +386,7 @@ async function importarVideo(
   tarefa,
   url,
   numero,
-  total
+  total,
 ) {
   console.log(`\n[${numero}/${total}] ${url}`);
 
@@ -382,19 +397,19 @@ async function importarVideo(
 
   if (!externalId) {
     throw new Error(
-      `Vídeo sem ID: ${url}`
+      `Vídeo sem ID: ${url}`,
     );
   }
 
   const existe = await memeJaExiste(
     tarefa.user_id,
     "tiktok",
-    externalId
+    externalId,
   );
 
   if (existe) {
     console.log(
-      `   ↷ ${externalId} já existe. Pulando.`
+      `   ↷ ${externalId} já existe. Pulando.`,
     );
 
     return "existente";
@@ -407,7 +422,7 @@ async function importarVideo(
       info.uploader_id ||
       info.uploader ||
       "desconhecido"
-    }`
+    }`,
   );
 
   let arquivo = null;
@@ -415,11 +430,11 @@ async function importarVideo(
   try {
     arquivo = await baixarVideo(
       url,
-      externalId
+      externalId,
     );
 
     console.log(
-      "   ↑ Enviando ao Supabase..."
+      "   ↑ Enviando ao Supabase...",
     );
 
     const publicUrl =
@@ -427,15 +442,15 @@ async function importarVideo(
         tarefa.user_id,
         "tiktok",
         externalId,
-        arquivo
+        arquivo,
       );
 
     console.log(
-      "   ✓ Arquivo enviado ao Storage"
+      "   ✓ Arquivo enviado ao Storage",
     );
 
     console.log(
-      "   ＋ Criando card no ECHO..."
+      "   ＋ Criando card no ECHO...",
     );
 
     await criarMeme({
@@ -447,7 +462,7 @@ async function importarVideo(
     });
 
     console.log(
-      "   ✓ Card criado no ECHO"
+      "   ✓ Card criado no ECHO",
     );
 
     return "importado";
@@ -457,7 +472,7 @@ async function importarVideo(
       existsSync(arquivo)
     ) {
       await unlink(arquivo).catch(
-        () => {}
+        () => {},
       );
     }
   }
@@ -469,31 +484,31 @@ async function importarVideo(
 
 async function processarTarefa(tarefa) {
   console.log(
-    "\n===================================="
+    "\n====================================",
   );
   console.log(
-    "ECHO // IMPORT WORKER"
+    "ECHO // IMPORT WORKER",
   );
   console.log(
-    "===================================="
-  );
-
-  console.log(
-    `Tarefa: ${tarefa.id}`
+    "====================================",
   );
 
   console.log(
-    `Fonte: ${tarefa.source_url}`
+    `Tarefa: ${tarefa.id}`,
   );
 
   console.log(
-    `Tipo: ${tarefa.source_type}`
+    `Fonte: ${tarefa.source_url}`,
+  );
+
+  console.log(
+    `Tipo: ${tarefa.source_type}`,
   );
 
   console.log(
     `Categoria: ${
       tarefa.categoria || "geral"
-    }`
+    }`,
   );
 
   await atualizarTarefa(
@@ -502,7 +517,7 @@ async function processarTarefa(tarefa) {
       status: "processing",
       error_message: null,
       processed_items: 0,
-    }
+    },
   );
 
   try {
@@ -513,7 +528,7 @@ async function processarTarefa(tarefa) {
     ) {
       urls =
         await listarVideosPerfil(
-          tarefa.source_url
+          tarefa.source_url,
         );
     } else {
       urls = [
@@ -523,19 +538,19 @@ async function processarTarefa(tarefa) {
 
     if (urls.length === 0) {
       throw new Error(
-        "Nenhum vídeo foi encontrado nessa fonte."
+        "Nenhum vídeo foi encontrado nessa fonte.",
       );
     }
 
     console.log(
-      `\n✓ ${urls.length} vídeo(s) encontrado(s).`
+      `\n✓ ${urls.length} vídeo(s) encontrado(s).`,
     );
 
     await atualizarTarefa(
       tarefa.id,
       {
         total_items: urls.length,
-      }
+      },
     );
 
     let processados = 0;
@@ -545,22 +560,72 @@ async function processarTarefa(tarefa) {
       i < urls.length;
       i++
     ) {
+      // Antes de começar o próximo vídeo,
+      // verifica se a usuária cancelou pelo ECHO.
+      if (
+        await tarefaFoiCancelada(
+          tarefa.id,
+        )
+      ) {
+        console.log(
+          "\n⊘ IMPORTAÇÃO CANCELADA PELO ECHO",
+        );
+
+        console.log(
+          `${processados}/${urls.length} processados antes do cancelamento.`,
+        );
+
+        return;
+      }
+
       await importarVideo(
         tarefa,
         urls[i],
         i + 1,
-        urls.length
+        urls.length,
       );
 
       processados++;
+
+      // Não sobrescreve "cancelled" caso o botão
+      // tenha sido clicado durante o processamento
+      // do vídeo atual.
+      if (
+        await tarefaFoiCancelada(
+          tarefa.id,
+        )
+      ) {
+        console.log(
+          "\n⊘ IMPORTAÇÃO CANCELADA PELO ECHO",
+        );
+
+        console.log(
+          `${processados}/${urls.length} processados antes do cancelamento.`,
+        );
+
+        return;
+      }
 
       await atualizarTarefa(
         tarefa.id,
         {
           processed_items:
             processados,
-        }
+        },
       );
+    }
+
+    // Última proteção antes de marcar como concluída.
+    if (
+      await tarefaFoiCancelada(
+        tarefa.id,
+      )
+    ) {
+      console.log(
+        "\n⊘ IMPORTAÇÃO CANCELADA PELO ECHO",
+      );
+
+      return;
     }
 
     await atualizarTarefa(
@@ -570,29 +635,45 @@ async function processarTarefa(tarefa) {
         processed_items:
           processados,
         error_message: null,
-      }
+      },
     );
 
     console.log(
-      "\n===================================="
+      "\n====================================",
     );
 
     console.log(
-      "✓ IMPORTAÇÃO CONCLUÍDA"
+      "✓ IMPORTAÇÃO CONCLUÍDA",
     );
 
     console.log(
-      `${processados}/${urls.length} processados`
+      `${processados}/${urls.length} processados`,
     );
 
     console.log(
-      "===================================="
+      "====================================",
     );
   } catch (erro) {
     const mensagem =
       erro instanceof Error
         ? erro.message
         : String(erro);
+
+    // Se a usuária cancelou enquanto alguma
+    // operação estava terminando, preserva
+    // o status cancelled em vez de trocar para failed.
+    const cancelada =
+      await tarefaFoiCancelada(
+        tarefa.id,
+      ).catch(() => false);
+
+    if (cancelada) {
+      console.log(
+        "\n⊘ Importação cancelada.",
+      );
+
+      return;
+    }
 
     await atualizarTarefa(
       tarefa.id,
@@ -601,9 +682,9 @@ async function processarTarefa(tarefa) {
         error_message:
           mensagem.slice(
             0,
-            5000
+            5000,
           ),
-      }
+      },
     ).catch(() => {});
 
     throw erro;
@@ -618,7 +699,7 @@ const INTERVALO_FILA_MS = 5000;
 
 function esperar(ms) {
   return new Promise((resolve) =>
-    setTimeout(resolve, ms)
+    setTimeout(resolve, ms),
   );
 }
 
@@ -626,26 +707,27 @@ let encerrando = false;
 
 process.on("SIGINT", () => {
   console.log(
-    "\n\nECHO // Encerrando worker..."
+    "\n\nECHO // Encerrando worker...",
   );
+
   encerrando = true;
 });
 
 async function main() {
   console.log(
-    "\n===================================="
+    "\n====================================",
   );
   console.log(
-    "ECHO // WORKER ATIVO"
+    "ECHO // WORKER ATIVO",
   );
   console.log(
-    "===================================="
+    "====================================",
   );
   console.log(
-    "Monitorando novas importações."
+    "Monitorando novas importações.",
   );
   console.log(
-    "Pressione Ctrl+C para encerrar.\n"
+    "Pressione Ctrl+C para encerrar.\n",
   );
 
   while (!encerrando) {
@@ -655,77 +737,79 @@ async function main() {
 
       if (!tarefa) {
         process.stdout.write(
-          "\rECHO // Aguardando novas importações... "
+          "\rECHO // Aguardando novas importações... ",
         );
 
         await esperar(
-          INTERVALO_FILA_MS
+          INTERVALO_FILA_MS,
         );
+
         continue;
       }
 
-      // Limpa a linha "aguardando"
       process.stdout.write(
-        "\r" + " ".repeat(60) + "\r"
+        "\r" + " ".repeat(60) + "\r",
       );
 
       try {
         await processarTarefa(
-          tarefa
+          tarefa,
         );
       } catch (erro) {
         console.error(
-          "\n✗ IMPORTAÇÃO FALHOU"
+          "\n✗ IMPORTAÇÃO FALHOU",
         );
 
         console.error(
           erro instanceof Error
             ? erro.message
-            : erro
+            : erro,
         );
 
         console.log(
-          "\nECHO // O worker continuará ativo."
+          "\nECHO // O worker continuará ativo.",
         );
       }
 
       if (!encerrando) {
         console.log(
-          "\nECHO // Procurando próxima tarefa..."
+          "\nECHO // Procurando próxima tarefa...",
         );
       }
     } catch (erro) {
       console.error(
-        "\n✗ Erro ao consultar a fila:"
+        "\n✗ Erro ao consultar a fila:",
       );
 
       console.error(
         erro instanceof Error
           ? erro.message
-          : erro
+          : erro,
       );
 
       console.log(
         `Tentando novamente em ${
           INTERVALO_FILA_MS / 1000
-        } segundos...`
+        } segundos...`,
       );
 
       await esperar(
-        INTERVALO_FILA_MS
+        INTERVALO_FILA_MS,
       );
     }
   }
 
   console.log(
-    "✓ Worker encerrado."
+    "✓ Worker encerrado.",
   );
 }
 
 main().catch((erro) => {
   console.error(
-    "\n✗ WORKER FALHOU"
+    "\n✗ WORKER FALHOU",
   );
+
   console.error(erro);
+
   process.exitCode = 1;
 });
