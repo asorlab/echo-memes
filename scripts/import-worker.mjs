@@ -75,9 +75,6 @@ const supabase = createClient(
 
 const BUCKET = "life-os";
 
-// Primeiro teste: somente 5 vídeos.
-const LIMITE_PERFIL = 5;
-
 // --------------------------------------------------
 // YT-DLP
 // --------------------------------------------------
@@ -124,12 +121,10 @@ function executarYtDlp(argumentos) {
 // --------------------------------------------------
 
 async function listarVideosPerfil(url) {
-  console.log(`🔎 Lendo perfil: ${url}`);
+  console.log(`🔎 Lendo perfil completo: ${url}`);
 
   const saida = await executarYtDlp([
     "--flat-playlist",
-    "--playlist-end",
-    String(LIMITE_PERFIL),
     "--print",
     "%(webpage_url)s",
     url,
@@ -622,43 +617,66 @@ async function processarTarefa(tarefa) {
 const INTERVALO_FILA_MS = 5000;
 
 function esperar(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) =>
+    setTimeout(resolve, ms)
+  );
 }
 
 let encerrando = false;
 
 process.on("SIGINT", () => {
-  console.log("\n\nECHO // Encerrando worker...");
+  console.log(
+    "\n\nECHO // Encerrando worker..."
+  );
   encerrando = true;
 });
 
 async function main() {
-  console.log("\n====================================");
-  console.log("ECHO // WORKER ATIVO");
-  console.log("====================================");
-  console.log("Monitorando novas importações.");
-  console.log("Pressione Ctrl+C para encerrar.\n");
+  console.log(
+    "\n===================================="
+  );
+  console.log(
+    "ECHO // WORKER ATIVO"
+  );
+  console.log(
+    "===================================="
+  );
+  console.log(
+    "Monitorando novas importações."
+  );
+  console.log(
+    "Pressione Ctrl+C para encerrar.\n"
+  );
 
   while (!encerrando) {
     try {
-      const tarefa = await buscarProximaTarefa();
+      const tarefa =
+        await buscarProximaTarefa();
 
       if (!tarefa) {
         process.stdout.write(
           "\rECHO // Aguardando novas importações... "
         );
 
-        await esperar(INTERVALO_FILA_MS);
+        await esperar(
+          INTERVALO_FILA_MS
+        );
         continue;
       }
 
       // Limpa a linha "aguardando"
-      process.stdout.write("\r" + " ".repeat(60) + "\r");
+      process.stdout.write(
+        "\r" + " ".repeat(60) + "\r"
+      );
 
       try {
-        await processarTarefa(tarefa);
+        await processarTarefa(
+          tarefa
+        );
       } catch (erro) {
-        console.error("\n✗ IMPORTAÇÃO FALHOU");
+        console.error(
+          "\n✗ IMPORTAÇÃO FALHOU"
+        );
 
         console.error(
           erro instanceof Error
@@ -693,15 +711,21 @@ async function main() {
         } segundos...`
       );
 
-      await esperar(INTERVALO_FILA_MS);
+      await esperar(
+        INTERVALO_FILA_MS
+      );
     }
   }
 
-  console.log("✓ Worker encerrado.");
+  console.log(
+    "✓ Worker encerrado."
+  );
 }
 
 main().catch((erro) => {
-  console.error("\n✗ WORKER FALHOU");
+  console.error(
+    "\n✗ WORKER FALHOU"
+  );
   console.error(erro);
   process.exitCode = 1;
 });
