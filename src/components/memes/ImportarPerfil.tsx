@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
+const CATEGORIA_PADRAO = "geral";
+
 export default function ImportarPerfil() {
   const [url, setUrl] = useState("");
-  const [categoria, setCategoria] = useState("geral");
   const [carregando, setCarregando] = useState(false);
   const [mensagem, setMensagem] = useState("");
 
@@ -44,7 +45,7 @@ export default function ImportarPerfil() {
           user_id: user.id,
           source_url: link,
           source_type: "profile",
-          categoria,
+          categoria: CATEGORIA_PADRAO,
           status: "pending",
         });
 
@@ -78,17 +79,6 @@ export default function ImportarPerfil() {
         placeholder="https://www.tiktok.com/@perfil"
         className="min-h-[38px] w-full rounded-md border border-neutral-800 bg-neutral-950 px-3 text-sm text-neutral-100 outline-none placeholder-neutral-600 focus:border-teal-500/40"
       />
-
-      <select
-        value={categoria}
-        onChange={(e) => setCategoria(e.target.value)}
-        className="min-h-[38px] w-full rounded-md border border-neutral-800 bg-neutral-950 px-3 text-sm text-neutral-300 outline-none focus:border-teal-500/40"
-      >
-        <option value="geral">Geral</option>
-        <option value="iveasor">IveAsor</option>
-        <option value="asor">ASOR</option>
-        <option value="aivil">AIVIL</option>
-      </select>
 
       <button
         type="button"

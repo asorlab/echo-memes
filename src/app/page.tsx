@@ -3,7 +3,7 @@ import ImportarPerfil from "@/components/memes/ImportarPerfil";
 import ImportActivity from "@/components/memes/ImportActivity";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Plus, Trash2, Image as ImageIcon, ExternalLink, Sparkles, Search, Download, Loader2, Link2, PencilLine, ChevronDown, Rss } from "lucide-react";
+import { Plus, Trash2, Image as ImageIcon, ExternalLink, Sparkles, Search, Download, Loader2, Link2, PencilLine, ChevronDown, Rss, CheckSquare, Square } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useUser } from "@/lib/useUser";
 import { useToast } from "@/components/ToastProvider";
@@ -86,6 +86,8 @@ export default function MemesPage() {
   const [importando, setImportando] = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
   const [abaAdicionar, setAbaAdicionar] = useState<AbaAdicionar>("tiktok");
+  const [modoSelecao, setModoSelecao] = useState(false);
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
 
   const primeiraCarga = useRef(true);
   const carregar = useCallback(async () => {
@@ -123,6 +125,30 @@ export default function MemesPage() {
     const { error } = await supabase.from("memes").delete().eq("id", id);
     if (error) { toast("Erro ao excluir"); return; }
     toast("Meme removido");
+    carregar();
+  }
+
+  function alternarSelecao(id: string) {
+    setSelecionados((atual) => {
+      const novo = new Set(atual);
+      if (novo.has(id)) novo.delete(id); else novo.add(id);
+      return novo;
+    });
+  }
+
+  function cancelarSelecao() {
+    setModoSelecao(false);
+    setSelecionados(new Set());
+  }
+
+  async function excluirSelecionados() {
+    if (selecionados.size === 0) return;
+    if (!window.confirm(`Excluir ${selecionados.size} meme(s) selecionado(s)? Essa ação não pode ser desfeita.`)) return;
+    const supabase = supabaseBrowser();
+    const { error } = await supabase.from("memes").delete().in("id", Array.from(selecionados));
+    if (error) { toast("Erro ao excluir"); return; }
+    toast(`${selecionados.size} meme(s) removido(s)`);
+    cancelarSelecao();
     carregar();
   }
 
@@ -258,15 +284,48 @@ export default function MemesPage() {
         )}
       </Modal>
 
-      <div className="mb-3 flex items-center gap-2 rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2">
-        <Search className="h-4 w-4 shrink-0 text-neutral-500" />
-        <input
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          placeholder="Buscar por título, explicação ou tag…"
-          className="w-full bg-transparent text-sm text-neutral-200 placeholder-neutral-600 outline-none"
-        />
+      <div className="mb-3 flex items-center gap-2">
+        <div className="flex flex-1 items-center gap-2 rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2">
+          <Search className="h-4 w-4 shrink-0 text-neutral-500" />
+          <input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por título, explicação ou tag…"
+            className="w-full bg-transparent text-sm text-neutral-200 placeholder-neutral-600 outline-none"
+          />
+        </div>
+        <button
+          onClick={() => (modoSelecao ? cancelarSelecao() : setModoSelecao(true))}
+          className={`flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-md border px-3 text-xs font-medium ${modoSelecao ? "border-teal-500/50 bg-teal-500/10 text-teal-300" : "border-neutral-800 text-neutral-400 hover:border-neutral-700 hover:text-neutral-200"}`}
+        >
+          <CheckSquare className="h-3.5 w-3.5" />
+          {modoSelecao ? "Cancelar" : "Selecionar"}
+        </button>
       </div>
+
+      {modoSelecao && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-teal-500/30 bg-teal-500/5 px-3 py-2">
+          <span className="text-xs text-teal-200">{selecionados.size} selecionado{selecionados.size === 1 ? "" : "s"}</span>
+          <button
+            onClick={() => setSelecionados(new Set(filtrados.map((m) => m.id)))}
+            className="text-xs text-neutral-400 hover:text-neutral-200"
+          >
+            Selecionar tudo
+          </button>
+          {selecionados.size > 0 && (
+            <button onClick={() => setSelecionados(new Set())} className="text-xs text-neutral-400 hover:text-neutral-200">
+              Limpar
+            </button>
+          )}
+          <button
+            onClick={excluirSelecionados}
+            disabled={selecionados.size === 0}
+            className="ml-auto flex items-center gap-1.5 rounded-md bg-[#F0997B] px-3 py-1.5 text-xs font-medium text-neutral-950 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Excluir {selecionados.size > 0 && `(${selecionados.size})`}
+          </button>
+        </div>
+      )}
 
       {todasAsTags.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-1.5">
@@ -310,7 +369,20 @@ export default function MemesPage() {
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtrados.map((m) => (
-            <Card key={m.id} className="overflow-hidden p-0">
+            <Card key={m.id} className={`relative overflow-hidden p-0 ${modoSelecao && selecionados.has(m.id) ? "ring-2 ring-teal-500" : ""}`}>
+              {modoSelecao && (
+                <>
+                  <div
+                    onClick={() => alternarSelecao(m.id)}
+                    className="absolute inset-0 z-20 cursor-pointer"
+                  />
+                  <div
+                    className={`pointer-events-none absolute right-1.5 top-1.5 z-30 flex h-6 w-6 items-center justify-center rounded-md border backdrop-blur-sm ${selecionados.has(m.id) ? "border-teal-500 bg-teal-500 text-neutral-950" : "border-neutral-600 bg-neutral-950/80 text-transparent"}`}
+                  >
+                    {selecionados.has(m.id) ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5 text-neutral-500" />}
+                  </div>
+                </>
+              )}
               <div className="relative flex max-h-[320px] min-h-[180px] w-full items-center justify-center bg-neutral-950 sm:max-h-[380px]">
                 {m.imagemUrl && !imagensQuebradas.has(m.imagemUrl) ? (
                   <>
@@ -331,13 +403,15 @@ export default function MemesPage() {
                         onError={() => setImagensQuebradas((atual) => new Set(atual).add(m.imagemUrl!))}
                       />
                     )}
-                    <button
-                      onClick={() => fileInputRefs.current[m.id]?.click()}
-                      title="Trocar arquivo"
-                      className="absolute right-1.5 top-1.5 rounded-md border border-neutral-700/60 bg-neutral-950/80 px-2 py-1 text-[10px] text-neutral-300 backdrop-blur-sm hover:border-teal-500/60 hover:text-teal-300"
-                    >
-                      Trocar
-                    </button>
+                    {!modoSelecao && (
+                      <button
+                        onClick={() => fileInputRefs.current[m.id]?.click()}
+                        title="Trocar arquivo"
+                        className="absolute right-1.5 top-1.5 rounded-md border border-neutral-700/60 bg-neutral-950/80 px-2 py-1 text-[10px] text-neutral-300 backdrop-blur-sm hover:border-teal-500/60 hover:text-teal-300"
+                      >
+                        Trocar
+                      </button>
+                    )}
                   </>
                 ) : (
                   <button
