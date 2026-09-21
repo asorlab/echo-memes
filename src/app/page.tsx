@@ -1,5 +1,6 @@
 "use client";
 import ImportarPerfil from "@/components/memes/ImportarPerfil";
+import ImportActivity from "@/components/memes/ImportActivity";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Plus, Trash2, Image as ImageIcon, ExternalLink, Sparkles, Search, Download, Loader2, Link2, PencilLine, ChevronDown, Rss } from "lucide-react";
@@ -295,6 +296,8 @@ export default function MemesPage() {
           )}
         </div>
       )}
+
+      {user && <ImportActivity userId={user.id} onImportCompleted={carregar} />}
 
       {carregando ? (
         <p className="py-10 text-center text-sm text-neutral-600">Carregando...</p>
