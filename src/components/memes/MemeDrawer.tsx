@@ -77,6 +77,7 @@ function ehVideo(url: string): boolean {
 
 interface MemeDrawerProps {
   meme: Meme;
+  arquivoUrlResolvido: string | null;
   usos: MemeUso[];
   onFechar: () => void;
   onAtualizar: (patch: Partial<{
@@ -93,7 +94,7 @@ interface MemeDrawerProps {
   onExcluirUso: (id: string) => void;
 }
 
-export default function MemeDrawer({ meme, usos, onFechar, onAtualizar, onTrocarArquivo, onExcluir, onBaixar, onRegistrarUso, onExcluirUso }: MemeDrawerProps) {
+export default function MemeDrawer({ meme, arquivoUrlResolvido, usos, onFechar, onAtualizar, onTrocarArquivo, onExcluir, onBaixar, onRegistrarUso, onExcluirUso }: MemeDrawerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [novoUso, setNovoUso] = useState("");
@@ -140,13 +141,13 @@ export default function MemeDrawer({ meme, usos, onFechar, onAtualizar, onTrocar
         </div>
 
         <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
-          {meme.imagemUrl && (
+          {meme.imagemUrl && arquivoUrlResolvido && (
             <div className="overflow-hidden rounded-lg border border-neutral-800 bg-black">
               {ehVideo(meme.imagemUrl) ? (
-                <video ref={videoRef} src={meme.imagemUrl} controls playsInline className="max-h-[280px] w-full object-contain" />
+                <video ref={videoRef} src={arquivoUrlResolvido} controls playsInline className="max-h-[280px] w-full object-contain" />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={meme.imagemUrl} alt="" className="max-h-[280px] w-full object-contain" />
+                <img src={arquivoUrlResolvido} alt="" className="max-h-[280px] w-full object-contain" />
               )}
             </div>
           )}

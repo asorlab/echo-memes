@@ -6,6 +6,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { useUser } from "@/lib/useUser";
 import { useToast } from "@/components/ToastProvider";
 import EditableField from "@/components/ui/EditableField";
+import { resolverUrl, urlsAssinadas } from "@/lib/storage";
 
 interface Edicao {
   id: string; titulo: string; arquivo_url: string | null; link_origem: string | null;
@@ -54,6 +55,7 @@ export default function EdicoesPage() {
   const [novaNota, setNovaNota] = useState("");
   const [novoLink, setNovoLink] = useState("");
   const [adicionarAberto, setAdicionarAberto] = useState(false);
+  const [urls, setUrls] = useState<Record<string, string>>({});
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const primeiraCarga = useRef(true);
@@ -65,10 +67,12 @@ export default function EdicoesPage() {
       supabase.from("edicoes_referencia").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
       supabase.from("edicoes_timestamps").select("*").eq("user_id", user.id).order("inicio_seg"),
     ]);
-    setItens((data as Edicao[]) ?? []);
+    const carregados = (data as Edicao[]) ?? [];
+    setItens(carregados);
     setTimestamps((tsData as Timestamp[]) ?? []);
     setCarregando(false);
     primeiraCarga.current = false;
+    urlsAssinadas(carregados.map((e) => e.arquivo_url)).then(setUrls);
   }, [user]);
 
   useEffect(() => { carregar(); }, [carregar]);
@@ -203,8 +207,8 @@ export default function EdicoesPage() {
             return (
               <button key={e.id} onClick={() => setDrawerId(e.id)} className="group text-left">
                 <div className="relative mb-1.5 flex aspect-video items-center justify-center overflow-hidden rounded-md bg-neutral-900">
-                  {ehVideo ? (
-                    <video src={e.arquivo_url!} muted playsInline className="h-full w-full object-cover" />
+                  {ehVideo && resolverUrl(e.arquivo_url, urls) ? (
+                    <video src={resolverUrl(e.arquivo_url, urls)} muted playsInline className="h-full w-full object-cover" />
                   ) : (
                     <Film className="h-5 w-5 text-neutral-700" />
                   )}
@@ -240,7 +244,7 @@ export default function EdicoesPage() {
               <button onClick={() => setDrawerId(null)} className="text-neutral-500 hover:text-neutral-300"><X className="h-4 w-4" /></button>
             </div>
             <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
-              {ehVideoLocal && <video ref={videoRef} src={drawerItem.arquivo_url!} controls playsInline className="max-h-[240px] w-full rounded bg-black object-contain" />}
+              {ehVideoLocal && resolverUrl(drawerItem.arquivo_url, urls) && <video ref={videoRef} src={resolverUrl(drawerItem.arquivo_url, urls)} controls playsInline className="max-h-[240px] w-full rounded bg-black object-contain" />}
               {drawerItem.link_origem && (
                 <a href={drawerItem.link_origem} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs text-sky-400 hover:text-sky-300">
                   <ExternalLink className="h-3.5 w-3.5" /> {drawerItem.link_origem}

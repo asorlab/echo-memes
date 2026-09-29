@@ -7,7 +7,7 @@ import {
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useUser } from "@/lib/useUser";
 import { useToast } from "@/components/ToastProvider";
-import { enviarArquivo } from "@/lib/storage";
+import { enviarArquivo, resolverUrl, urlAssinada, urlsAssinadas, ehCaminhoInterno } from "@/lib/storage";
 import Card from "@/components/ui/Card";
 import PageHeader from "@/components/ui/PageHeader";
 import EmptyState from "@/components/ui/EmptyState";
@@ -74,6 +74,7 @@ export default function AudiosPage() {
   const [enviando, setEnviando] = useState(false);
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const [novoUso, setNovoUso] = useState("");
+  const [urls, setUrls] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const primeiraCarga = useRef(true);
@@ -85,10 +86,12 @@ export default function AudiosPage() {
       supabase.from("audios").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
       supabase.from("audios_usos").select("*").eq("user_id", user.id).order("data", { ascending: false }),
     ]);
-    setItens(((data as AudioRow[]) ?? []).map(mapAudio));
+    const carregados = ((data as AudioRow[]) ?? []).map(mapAudio);
+    setItens(carregados);
     setUsos(((usosData as AudioUsoRow[]) ?? []).map(mapUso));
     setCarregando(false);
     primeiraCarga.current = false;
+    urlsAssinadas(carregados.map((a) => a.arquivoUrl)).then(setUrls);
   }, [user]);
 
   useEffect(() => { carregar(); }, [carregar]);
@@ -150,8 +153,10 @@ export default function AudiosPage() {
 
   async function baixar(item: Audio) {
     if (!item.arquivoUrl) return;
+    const urlParaBaixar = resolverUrl(item.arquivoUrl, urls) ?? (ehCaminhoInterno(item.arquivoUrl) ? await urlAssinada(item.arquivoUrl) : null);
+    if (!urlParaBaixar) { toast("Erro ao baixar"); return; }
     try {
-      const resposta = await fetch(item.arquivoUrl);
+      const resposta = await fetch(urlParaBaixar);
       const blob = await resposta.blob();
       const url = URL.createObjectURL(blob);
       const extensao = item.arquivoUrl.split("?")[0].split(".").pop() || "mp3";
@@ -161,7 +166,7 @@ export default function AudiosPage() {
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
     } catch {
-      window.open(item.arquivoUrl, "_blank");
+      window.open(urlParaBaixar, "_blank");
     }
   }
 
@@ -234,7 +239,7 @@ export default function AudiosPage() {
                   </div>
                   {a.favorito && <Star className="h-3.5 w-3.5 shrink-0 text-amber-400" fill="currentColor" />}
                 </div>
-                {a.arquivoUrl && <audio src={a.arquivoUrl} controls className="mb-2 h-8 w-full" onClick={(e) => e.stopPropagation()} />}
+                {a.arquivoUrl && resolverUrl(a.arquivoUrl, urls) && <audio src={resolverUrl(a.arquivoUrl, urls)} controls className="mb-2 h-8 w-full" onClick={(e) => e.stopPropagation()} />}
                 <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-neutral-500">
                   {a.tipo && <span className="rounded-full bg-teal-500/10 px-1.5 py-0.5 text-teal-300">{TIPOS.find((t) => t.id === a.tipo)?.rotulo}</span>}
                   {a.categoriaSfx && <span className="rounded-full bg-neutral-800 px-1.5 py-0.5 text-neutral-400">{CATEGORIAS_SFX.find((c) => c.id === a.categoriaSfx)?.rotulo}</span>}
@@ -262,7 +267,7 @@ export default function AudiosPage() {
               <button onClick={() => setDrawerId(null)} className="text-neutral-500 hover:text-neutral-300"><X className="h-4 w-4" /></button>
             </div>
             <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
-              {drawerItem.arquivoUrl && <audio src={drawerItem.arquivoUrl} controls className="w-full" />}
+              {drawerItem.arquivoUrl && resolverUrl(drawerItem.arquivoUrl, urls) && <audio src={resolverUrl(drawerItem.arquivoUrl, urls)} controls className="w-full" />}
               <div className="flex gap-2">
                 <button onClick={() => baixar(drawerItem)} className="flex items-center gap-1.5 rounded-md bg-teal-500 px-3 py-1.5 text-xs font-medium text-neutral-950 hover:opacity-90">
                   <Download className="h-3.5 w-3.5" /> Baixar

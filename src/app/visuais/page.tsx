@@ -5,7 +5,7 @@ import { Plus, Trash2, Image as ImageIcon, Search, Download, Star, X, History, E
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useUser } from "@/lib/useUser";
 import { useToast } from "@/components/ToastProvider";
-import { enviarArquivo } from "@/lib/storage";
+import { enviarArquivo, resolverUrl, urlAssinada, urlsAssinadas, ehCaminhoInterno } from "@/lib/storage";
 import Card from "@/components/ui/Card";
 import PageHeader from "@/components/ui/PageHeader";
 import EmptyState from "@/components/ui/EmptyState";
@@ -74,6 +74,7 @@ export default function VisuaisPage() {
   const [enviando, setEnviando] = useState(false);
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const [novoUso, setNovoUso] = useState("");
+  const [urls, setUrls] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const primeiraCarga = useRef(true);
@@ -85,10 +86,12 @@ export default function VisuaisPage() {
       supabase.from("visuais").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
       supabase.from("visuais_usos").select("*").eq("user_id", user.id).order("data", { ascending: false }),
     ]);
-    setItens(((data as VisualRow[]) ?? []).map(mapVisual));
+    const carregados = ((data as VisualRow[]) ?? []).map(mapVisual);
+    setItens(carregados);
     setUsos(((usosData as VisualUsoRow[]) ?? []).map(mapUso));
     setCarregando(false);
     primeiraCarga.current = false;
+    urlsAssinadas(carregados.map((v) => v.arquivoUrl)).then(setUrls);
   }, [user]);
 
   useEffect(() => { carregar(); }, [carregar]);
@@ -148,8 +151,10 @@ export default function VisuaisPage() {
 
   async function baixar(item: Visual) {
     if (!item.arquivoUrl) return;
+    const urlParaBaixar = resolverUrl(item.arquivoUrl, urls) ?? (ehCaminhoInterno(item.arquivoUrl) ? await urlAssinada(item.arquivoUrl) : null);
+    if (!urlParaBaixar) { toast("Erro ao baixar"); return; }
     try {
-      const resposta = await fetch(item.arquivoUrl);
+      const resposta = await fetch(urlParaBaixar);
       const blob = await resposta.blob();
       const url = URL.createObjectURL(blob);
       const extensao = item.arquivoUrl.split("?")[0].split(".").pop() || "png";
@@ -159,7 +164,7 @@ export default function VisuaisPage() {
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
     } catch {
-      window.open(item.arquivoUrl, "_blank");
+      window.open(urlParaBaixar, "_blank");
     }
   }
 
@@ -225,12 +230,12 @@ export default function VisuaisPage() {
                   <p className="min-w-0 truncate text-sm font-medium text-neutral-100">{v.titulo}</p>
                   {v.favorito && <Star className="h-3.5 w-3.5 shrink-0 text-amber-400" fill="currentColor" />}
                 </div>
-                {v.arquivoUrl && (
+                {v.arquivoUrl && resolverUrl(v.arquivoUrl, urls) && (
                   ehVideo(v.arquivoUrl) ? (
-                    <video src={v.arquivoUrl} muted playsInline className="mb-2 h-28 w-full rounded object-cover" />
+                    <video src={resolverUrl(v.arquivoUrl, urls)} muted playsInline className="mb-2 h-28 w-full rounded object-cover" />
                   ) : (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={v.arquivoUrl} alt="" className="mb-2 h-28 w-full rounded object-cover" />
+                    <img src={resolverUrl(v.arquivoUrl, urls)} alt="" className="mb-2 h-28 w-full rounded object-cover" />
                   )
                 )}
                 <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-neutral-500">
@@ -254,12 +259,12 @@ export default function VisuaisPage() {
               <button onClick={() => setDrawerId(null)} className="text-neutral-500 hover:text-neutral-300"><X className="h-4 w-4" /></button>
             </div>
             <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
-              {drawerItem.arquivoUrl && (
+              {drawerItem.arquivoUrl && resolverUrl(drawerItem.arquivoUrl, urls) && (
                 ehVideo(drawerItem.arquivoUrl) ? (
-                  <video src={drawerItem.arquivoUrl} controls playsInline className="max-h-[240px] w-full rounded bg-black object-contain" />
+                  <video src={resolverUrl(drawerItem.arquivoUrl, urls)} controls playsInline className="max-h-[240px] w-full rounded bg-black object-contain" />
                 ) : (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={drawerItem.arquivoUrl} alt="" className="max-h-[240px] w-full rounded bg-black object-contain" />
+                  <img src={resolverUrl(drawerItem.arquivoUrl, urls)} alt="" className="max-h-[240px] w-full rounded bg-black object-contain" />
                 )
               )}
               <div className="flex flex-wrap gap-2">

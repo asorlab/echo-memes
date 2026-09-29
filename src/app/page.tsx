@@ -11,7 +11,7 @@ import {
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useUser } from "@/lib/useUser";
 import { useToast } from "@/components/ToastProvider";
-import { enviarArquivo } from "@/lib/storage";
+import { enviarArquivo, resolverUrl, urlAssinada, urlsAssinadas, ehCaminhoInterno } from "@/lib/storage";
 import Card from "@/components/ui/Card";
 import Modal from "@/components/ui/Modal";
 import PageHeader from "@/components/ui/PageHeader";
@@ -119,6 +119,7 @@ export default function MemesPage() {
   const [modoSelecao, setModoSelecao] = useState(false);
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [drawerId, setDrawerId] = useState<string | null>(null);
+  const [urls, setUrls] = useState<Record<string, string>>({});
 
   const primeiraCarga = useRef(true);
   const carregar = useCallback(async () => {
@@ -129,10 +130,12 @@ export default function MemesPage() {
       supabase.from("memes").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
       supabase.from("memes_usos").select("*").eq("user_id", user.id).order("data", { ascending: false }),
     ]);
-    setMemes(((data as MemeRow[]) ?? []).map(mapMeme));
+    const memesCarregados = ((data as MemeRow[]) ?? []).map(mapMeme);
+    setMemes(memesCarregados);
     setUsos(((usosData as MemeUsoRow[]) ?? []).map(mapUso));
     setCarregando(false);
     primeiraCarga.current = false;
+    urlsAssinadas(memesCarregados.map((m) => m.imagemUrl)).then(setUrls);
   }, [user]);
 
   useEffect(() => { carregar(); }, [carregar]);
@@ -227,8 +230,10 @@ export default function MemesPage() {
     const partes = [meme.emocao ?? "meme", meme.duracaoSeg ? `${Math.round(meme.duracaoSeg)}s` : null, meme.orientacao].filter(Boolean);
     const extensao = meme.imagemUrl.split("?")[0].split(".").pop() || "mp4";
     const nomeArquivo = `${slugify(partes.join("_"))}.${extensao}`;
+    const urlParaBaixar = resolverUrl(meme.imagemUrl, urls) ?? (ehCaminhoInterno(meme.imagemUrl) ? await urlAssinada(meme.imagemUrl) : null);
+    if (!urlParaBaixar) { toast("Erro ao baixar"); return; }
     try {
-      const resposta = await fetch(meme.imagemUrl);
+      const resposta = await fetch(urlParaBaixar);
       const blob = await resposta.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -237,7 +242,7 @@ export default function MemesPage() {
       URL.revokeObjectURL(url);
     } catch {
       toast("Erro ao baixar — abrindo em nova aba");
-      window.open(meme.imagemUrl, "_blank");
+      window.open(urlParaBaixar, "_blank");
     }
   }
 
@@ -443,12 +448,12 @@ export default function MemesPage() {
                   onClick={() => !modoSelecao && setDrawerId(m.id)}
                   className="relative flex h-[160px] w-full items-center justify-center bg-neutral-950 sm:h-[190px]"
                 >
-                  {m.imagemUrl && !imagensQuebradas.has(m.imagemUrl) ? (
+                  {m.imagemUrl && resolverUrl(m.imagemUrl, urls) && !imagensQuebradas.has(m.imagemUrl) ? (
                     ehVideo(m.imagemUrl) ? (
-                      <video src={m.imagemUrl} className="h-full w-full object-cover" muted playsInline onError={() => setImagensQuebradas((atual) => new Set(atual).add(m.imagemUrl!))} />
+                      <video src={resolverUrl(m.imagemUrl, urls)} className="h-full w-full object-cover" muted playsInline onError={() => setImagensQuebradas((atual) => new Set(atual).add(m.imagemUrl!))} />
                     ) : (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={m.imagemUrl} alt="" className="h-full w-full object-cover" onError={() => setImagensQuebradas((atual) => new Set(atual).add(m.imagemUrl!))} />
+                      <img src={resolverUrl(m.imagemUrl, urls)} alt="" className="h-full w-full object-cover" onError={() => setImagensQuebradas((atual) => new Set(atual).add(m.imagemUrl!))} />
                     )
                   ) : (
                     <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-neutral-700">
@@ -522,6 +527,7 @@ export default function MemesPage() {
       {memeDrawer && (
         <MemeDrawer
           meme={memeDrawer}
+          arquivoUrlResolvido={resolverUrl(memeDrawer.imagemUrl, urls) ?? null}
           usos={usosPorMeme[memeDrawer.id] ?? []}
           onFechar={() => setDrawerId(null)}
           onAtualizar={(patch) => atualizar(memeDrawer.id, patch)}

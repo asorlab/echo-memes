@@ -5,7 +5,7 @@ import { Plus, Trash2, Search, Download, Star, X, History, ExternalLink, Link2 }
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useUser } from "@/lib/useUser";
 import { useToast } from "@/components/ToastProvider";
-import { enviarArquivo } from "@/lib/storage";
+import { enviarArquivo, resolverUrl, urlAssinada, urlsAssinadas, ehCaminhoInterno } from "@/lib/storage";
 import Card from "@/components/ui/Card";
 import PageHeader from "@/components/ui/PageHeader";
 import EmptyState from "@/components/ui/EmptyState";
@@ -71,6 +71,7 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const [novoUso, setNovoUso] = useState("");
   const [novoLink, setNovoLink] = useState("");
+  const [urls, setUrls] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const primeiraCarga = useRef(true);
@@ -79,13 +80,15 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
     if (primeiraCarga.current) setCarregando(true);
     const supabase = supabaseBrowser();
     const { data } = await supabase.from(config.tabela).select("*").eq("user_id", user.id).order("created_at", { ascending: false });
-    setItens((data as Registro[]) ?? []);
+    const carregados = (data as Registro[]) ?? [];
+    setItens(carregados);
     if (config.tabelaUsos) {
       const { data: usosData } = await supabase.from(config.tabelaUsos).select("*").eq("user_id", user.id).order("data", { ascending: false });
       setUsos((usosData as Registro[]) ?? []);
     }
     setCarregando(false);
     primeiraCarga.current = false;
+    urlsAssinadas(carregados.map((it) => it.arquivo_url)).then(setUrls);
   }, [user, config.tabela, config.tabelaUsos]);
 
   useEffect(() => { carregar(); }, [carregar]);
@@ -150,8 +153,10 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
 
   async function baixar(item: Registro) {
     if (!item.arquivo_url) return;
+    const urlParaBaixar = resolverUrl(item.arquivo_url, urls) ?? (ehCaminhoInterno(item.arquivo_url) ? await urlAssinada(item.arquivo_url) : null);
+    if (!urlParaBaixar) { toast("Erro ao baixar"); return; }
     try {
-      const resposta = await fetch(item.arquivo_url);
+      const resposta = await fetch(urlParaBaixar);
       const blob = await resposta.blob();
       const url = URL.createObjectURL(blob);
       const extensao = item.arquivo_url.split("?")[0].split(".").pop() || "bin";
@@ -161,7 +166,7 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
     } catch {
-      window.open(item.arquivo_url, "_blank");
+      window.open(urlParaBaixar, "_blank");
     }
   }
 
@@ -327,7 +332,7 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {filtrados.map((it) => {
             const usosDoItem = config.usosFk ? usosPorItem[it.id] ?? [] : [];
-            const url = it.arquivo_url ?? undefined;
+            const url = resolverUrl(it.arquivo_url, urls);
             return (
               <Card key={it.id} className="cursor-pointer p-3 hover:border-teal-500/30" onClick={() => setDrawerId(it.id)}>
                 <div className="mb-1 flex items-start justify-between gap-2">
@@ -366,11 +371,11 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
               <button onClick={() => setDrawerId(null)} className="text-neutral-500 hover:text-neutral-300"><X className="h-4 w-4" /></button>
             </div>
             <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
-              {drawerItem.arquivo_url && ehAudio(drawerItem.arquivo_url) && <audio src={drawerItem.arquivo_url} controls className="w-full" />}
-              {drawerItem.arquivo_url && ehVideo(drawerItem.arquivo_url) && <video src={drawerItem.arquivo_url} controls playsInline className="max-h-[240px] w-full rounded object-contain bg-black" />}
-              {drawerItem.arquivo_url && !ehAudio(drawerItem.arquivo_url) && !ehVideo(drawerItem.arquivo_url) && (
+              {drawerItem.arquivo_url && resolverUrl(drawerItem.arquivo_url, urls) && ehAudio(drawerItem.arquivo_url) && <audio src={resolverUrl(drawerItem.arquivo_url, urls)} controls className="w-full" />}
+              {drawerItem.arquivo_url && resolverUrl(drawerItem.arquivo_url, urls) && ehVideo(drawerItem.arquivo_url) && <video src={resolverUrl(drawerItem.arquivo_url, urls)} controls playsInline className="max-h-[240px] w-full rounded object-contain bg-black" />}
+              {drawerItem.arquivo_url && resolverUrl(drawerItem.arquivo_url, urls) && !ehAudio(drawerItem.arquivo_url) && !ehVideo(drawerItem.arquivo_url) && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={drawerItem.arquivo_url} alt="" className="max-h-[240px] w-full rounded object-contain bg-black" />
+                <img src={resolverUrl(drawerItem.arquivo_url, urls)} alt="" className="max-h-[240px] w-full rounded object-contain bg-black" />
               )}
               <div className="flex flex-wrap gap-2">
                 {drawerItem.arquivo_url && (
