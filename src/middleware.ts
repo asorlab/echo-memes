@@ -37,13 +37,28 @@ export async function middleware(request: NextRequest) {
   );
 
   const { data: { user } } = await supabase.auth.getUser();
+  const rotaPublica = ehRotaPublica(request.nextUrl.pathname);
 
-  if (!user && !ehRotaPublica(request.nextUrl.pathname)) {
+  if (!user && !rotaPublica) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.search = "";
     url.searchParams.set("next", request.nextUrl.pathname);
     return NextResponse.redirect(url);
+  }
+
+  // Mesma conta/projeto do echo-os-app: se o MFA foi ativado por la, uma
+  // sessao aal1 (so senha, TOTP pendente) nao pode acessar rota privada
+  // nenhuma aqui tambem — senao esse app vira uma porta lateral que dribla
+  // o segundo fator.
+  if (user && !rotaPublica) {
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (aal && aal.nextLevel === "aal2" && aal.currentLevel !== "aal2") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
   }
 
   return response;

@@ -2,8 +2,9 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Radio } from "lucide-react";
+import { Radio, ShieldCheck } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import { nivelAal, iniciarDesafioLogin, confirmarDesafioLogin } from "@/lib/mfaChallenge";
 
 export default function LoginPage() {
   return (
@@ -13,7 +14,7 @@ export default function LoginPage() {
   );
 }
 
-type Modo = "entrar" | "criar-conta" | "esqueci-senha" | "nova-senha";
+type Modo = "entrar" | "criar-conta" | "esqueci-senha" | "nova-senha" | "mfa";
 
 function FormularioLogin() {
   const router = useRouter();
@@ -26,8 +27,43 @@ function FormularioLogin() {
   const [aviso, setAviso] = useState("");
   const [carregando, setCarregando] = useState(false);
 
+  const [codigoMfa, setCodigoMfa] = useState("");
+  const [desafioMfa, setDesafioMfa] = useState<{ factorId: string; challengeId: string } | null>(null);
+  const [erroMfa, setErroMfa] = useState("");
+  const [verificandoMfa, setVerificandoMfa] = useState(false);
+
+  async function iniciarMfaSeNecessario(): Promise<boolean> {
+    const nivel = await nivelAal();
+    if (nivel.proximo === "aal2" && nivel.atual !== "aal2") {
+      const desafio = await iniciarDesafioLogin();
+      setDesafioMfa(desafio);
+      setModo("mfa");
+      return true;
+    }
+    return false;
+  }
+
+  async function confirmarMfa() {
+    if (!desafioMfa || codigoMfa.trim().length < 6) return;
+    setVerificandoMfa(true);
+    setErroMfa("");
+    try {
+      await confirmarDesafioLogin(desafioMfa.factorId, desafioMfa.challengeId, codigoMfa.trim());
+      router.replace(proximaRota);
+    } catch {
+      setErroMfa("Código incorreto — confira o app autenticador e tenta de novo");
+      setCodigoMfa("");
+    } finally {
+      setVerificandoMfa(false);
+    }
+  }
+
   useEffect(() => {
     const supabase = supabaseBrowser();
+
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) iniciarMfaSeNecessario();
+    });
 
     const codigo = searchParams.get("code");
     if (codigo) {
@@ -68,7 +104,10 @@ function FormularioLogin() {
     if (modo === "entrar") {
       const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
       if (error) setErro(error.message);
-      else router.replace(proximaRota);
+      else {
+        const precisaMfa = await iniciarMfaSeNecessario();
+        if (!precisaMfa) router.replace(proximaRota);
+      }
     } else if (modo === "criar-conta") {
       const { error } = await supabase.auth.signUp({ email, password: senha });
       if (error) setErro(error.message);
@@ -100,6 +139,30 @@ function FormularioLogin() {
           <span className="font-mono text-sm font-semibold tracking-tight text-neutral-100">ECHO // ASSETS</span>
         </div>
 
+        {modo === "mfa" ? (
+          <form onSubmit={(e) => { e.preventDefault(); confirmarMfa(); }} className="space-y-3">
+            <div className="mb-1 flex items-center gap-1.5 text-xs text-neutral-500">
+              <ShieldCheck className="h-3.5 w-3.5 text-teal-400" /> Digite o código do seu app autenticador
+            </div>
+            <input
+              autoFocus
+              inputMode="numeric"
+              value={codigoMfa}
+              onChange={(e) => setCodigoMfa(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="000000"
+              className="min-h-[44px] w-full rounded-md border border-neutral-800 bg-neutral-950 px-3 text-center font-mono text-lg tracking-[0.3em] text-neutral-100 outline-none focus:border-teal-500/40"
+            />
+            {erroMfa && <p className="text-xs text-[#F0997B]">{erroMfa}</p>}
+            <button
+              type="submit"
+              disabled={codigoMfa.trim().length < 6 || verificandoMfa}
+              className="min-h-[44px] w-full rounded-md bg-teal-500 text-sm font-medium text-neutral-950 transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              {verificandoMfa ? "Verificando..." : "Confirmar"}
+            </button>
+          </form>
+        ) : (
+        <>
         {modo === "nova-senha" && (
           <p className="mb-3 text-xs text-neutral-500">Escolha uma nova senha para sua conta.</p>
         )}
@@ -167,6 +230,8 @@ function FormularioLogin() {
           <button onClick={() => limpar("entrar")} className="mt-4 min-h-[44px] w-full text-center text-xs text-neutral-500 hover:text-neutral-300">
             Voltar para login
           </button>
+        )}
+        </>
         )}
       </div>
     </div>
