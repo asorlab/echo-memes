@@ -33,7 +33,7 @@ const GRUPOS: GrupoNav[] = [
     rotulo: "Edição",
     itens: [
       { id: "memes", nome: "Memes", icone: Sparkles, href: "/" },
-      { id: "sfx", nome: "SFX", icone: Volume2, href: null },
+      { id: "sfx", nome: "SFX", icone: Volume2, href: "/sfx" },
       { id: "audios", nome: "Áudios", icone: AudioLines, href: null },
       { id: "overlays", nome: "Overlays", icone: Layers, href: null },
       { id: "transicoes", nome: "Transições", icone: ArrowRightLeft, href: null },

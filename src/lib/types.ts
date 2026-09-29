@@ -49,3 +49,26 @@ export interface MemeUso {
   contexto: string;
   data: string;
 }
+
+export type CategoriaSfx = "whoosh" | "impacto" | "notificacao" | "transicao" | "risada" | "erro" | "sucesso" | "ambiente" | "outro";
+
+export interface Sfx {
+  id: string;
+  titulo: string;
+  arquivoUrl: string | null;
+  categoria: CategoriaSfx | null;
+  momento: Momento | null;
+  risco: Risco | null;
+  duracaoSeg: number | null;
+  tags: string[];
+  linkOrigem: string | null;
+  favorito: boolean;
+  criadoEm: string;
+}
+
+export interface SfxUso {
+  id: string;
+  sfxId: string;
+  contexto: string;
+  data: string;
+}
