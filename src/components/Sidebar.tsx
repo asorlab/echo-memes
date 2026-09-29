@@ -54,10 +54,10 @@ const GRUPOS: GrupoNav[] = [
     id: "referencias",
     rotulo: "Referências",
     itens: [
-      { id: "edicoes-ref", nome: "Edições", icone: Compass, href: null },
-      { id: "shots", nome: "Shots", icone: Camera, href: null },
-      { id: "hooks", nome: "Hooks", icone: Anchor, href: null },
-      { id: "inspiracoes", nome: "Inspirações", icone: Lightbulb, href: null },
+      { id: "edicoes-ref", nome: "Edições", icone: Compass, href: "/edicoes" },
+      { id: "shots", nome: "Shots", icone: Camera, href: "/shots" },
+      { id: "hooks", nome: "Hooks", icone: Anchor, href: "/hooks" },
+      { id: "inspiracoes", nome: "Inspirações", icone: Lightbulb, href: "/inspiracoes" },
     ],
   },
 ];
