@@ -7,14 +7,21 @@
 -- existente, nada e apagado ou migrado.
 -- Roda inteiro no SQL Editor.
 
-alter table memes add column if not exists excluido_em timestamptz;
-alter table audios add column if not exists excluido_em timestamptz;
-alter table visuais add column if not exists excluido_em timestamptz;
-alter table templates add column if not exists excluido_em timestamptz;
-alter table fontes add column if not exists excluido_em timestamptz;
-alter table brand_assets add column if not exists excluido_em timestamptz;
-alter table paletas add column if not exists excluido_em timestamptz;
-alter table inspiracoes add column if not exists excluido_em timestamptz;
-alter table edicoes_referencia add column if not exists excluido_em timestamptz;
+-- to_regclass checa se a tabela existe antes de alterar — se alguma nao
+-- existir de verdade no banco (aconteceu com "visuais"/"templates"), pula
+-- ela com um aviso em vez de abortar a migracao inteira.
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['memes','audios','visuais','templates','fontes','brand_assets','paletas','inspiracoes','edicoes_referencia']
+  loop
+    if to_regclass(format('public.%I', t)) is not null then
+      execute format('alter table %I add column if not exists excluido_em timestamptz', t);
+    else
+      raise notice 'tabela % nao existe — coluna excluido_em NAO adicionada pra ela', t;
+    end if;
+  end loop;
+end $$;
 
 notify pgrst, 'reload schema';
