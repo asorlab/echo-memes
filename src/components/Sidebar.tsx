@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  Radio, Sparkles, LogOut, X, ChevronDown, AudioLines, ImageIcon, LayoutTemplate, Compass, Lightbulb,
+  Radio, Sparkles, LogOut, X, ChevronDown, AudioLines, ImageIcon, LayoutTemplate, Compass, Lightbulb, Trash2,
 } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
@@ -129,7 +129,16 @@ export default function Sidebar({ aberta = false, fechar = () => {} }: SidebarPr
           })}
         </nav>
 
-        <div className="border-t border-neutral-800 px-3 py-3">
+        <div className="space-y-0.5 border-t border-neutral-800 px-3 py-3">
+          <button
+            onClick={() => { router.push("/lixeira"); fechar(); }}
+            className={`flex min-h-[40px] w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
+              pathname === "/lixeira" ? "bg-teal-500/10 text-teal-300" : "text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
+            }`}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            <span className="font-mono text-[13px]">Lixeira</span>
+          </button>
           <button
             onClick={sair}
             className="flex min-h-[44px] w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"

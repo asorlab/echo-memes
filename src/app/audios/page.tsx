@@ -83,7 +83,7 @@ export default function AudiosPage() {
     if (primeiraCarga.current) setCarregando(true);
     const supabase = supabaseBrowser();
     const [{ data }, { data: usosData }] = await Promise.all([
-      supabase.from("audios").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
+      supabase.from("audios").select("*").eq("user_id", user.id).is("excluido_em", null).order("created_at", { ascending: false }),
       supabase.from("audios_usos").select("*").eq("user_id", user.id).order("data", { ascending: false }),
     ]);
     const carregados = ((data as AudioRow[]) ?? []).map(mapAudio);
@@ -133,9 +133,9 @@ export default function AudiosPage() {
 
   async function excluir(id: string) {
     const supabase = supabaseBrowser();
-    const { error } = await supabase.from("audios").delete().eq("id", id);
+    const { error } = await supabase.from("audios").update({ excluido_em: new Date().toISOString() }).eq("id", id);
     if (error) { toast("Erro ao excluir"); return; }
-    toast("Áudio removido");
+    toast("Movido pra lixeira");
     if (drawerId === id) setDrawerId(null);
     carregar();
   }

@@ -83,7 +83,7 @@ export default function VisuaisPage() {
     if (primeiraCarga.current) setCarregando(true);
     const supabase = supabaseBrowser();
     const [{ data }, { data: usosData }] = await Promise.all([
-      supabase.from("visuais").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
+      supabase.from("visuais").select("*").eq("user_id", user.id).is("excluido_em", null).order("created_at", { ascending: false }),
       supabase.from("visuais_usos").select("*").eq("user_id", user.id).order("data", { ascending: false }),
     ]);
     const carregados = ((data as VisualRow[]) ?? []).map(mapVisual);
@@ -131,9 +131,9 @@ export default function VisuaisPage() {
 
   async function excluir(id: string) {
     const supabase = supabaseBrowser();
-    const { error } = await supabase.from("visuais").delete().eq("id", id);
+    const { error } = await supabase.from("visuais").update({ excluido_em: new Date().toISOString() }).eq("id", id);
     if (error) { toast("Erro ao excluir"); return; }
-    toast("Removido");
+    toast("Movido pra lixeira");
     if (drawerId === id) setDrawerId(null);
     carregar();
   }

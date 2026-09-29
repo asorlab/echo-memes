@@ -64,7 +64,7 @@ export default function EdicoesPage() {
     if (primeiraCarga.current) setCarregando(true);
     const supabase = supabaseBrowser();
     const [{ data }, { data: tsData }] = await Promise.all([
-      supabase.from("edicoes_referencia").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
+      supabase.from("edicoes_referencia").select("*").eq("user_id", user.id).is("excluido_em", null).order("created_at", { ascending: false }),
       supabase.from("edicoes_timestamps").select("*").eq("user_id", user.id).order("inicio_seg"),
     ]);
     const carregados = (data as Edicao[]) ?? [];
@@ -92,9 +92,9 @@ export default function EdicoesPage() {
   }
 
   async function excluir(id: string) {
-    const { error } = await supabaseBrowser().from("edicoes_referencia").delete().eq("id", id);
+    const { error } = await supabaseBrowser().from("edicoes_referencia").update({ excluido_em: new Date().toISOString() }).eq("id", id);
     if (error) { toast("Erro ao excluir"); return; }
-    toast("Removido");
+    toast("Movido pra lixeira");
     if (drawerId === id) setDrawerId(null);
     carregar();
   }

@@ -81,6 +81,10 @@ export async function urlsAssinadas(caminhos: (string | null | undefined)[], exp
   return mapa;
 }
 
+// Lanca erro se a remocao falhar — quem chama (ex.: exclusao definitiva da
+// lixeira) precisa saber que o arquivo NAO foi removido, pra nao apagar o
+// registro do banco e fingir que a exclusao terminou.
 export async function removerArquivo(caminho: string) {
-  await supabaseBrowser().storage.from(BUCKET).remove([caminho]);
+  const { error } = await supabaseBrowser().storage.from(BUCKET).remove([caminho]);
+  if (error) throw error;
 }

@@ -127,7 +127,7 @@ export default function MemesPage() {
     if (primeiraCarga.current) setCarregando(true);
     const supabase = supabaseBrowser();
     const [{ data }, { data: usosData }] = await Promise.all([
-      supabase.from("memes").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
+      supabase.from("memes").select("*").eq("user_id", user.id).is("excluido_em", null).order("created_at", { ascending: false }),
       supabase.from("memes_usos").select("*").eq("user_id", user.id).order("data", { ascending: false }),
     ]);
     const memesCarregados = ((data as MemeRow[]) ?? []).map(mapMeme);
@@ -165,9 +165,9 @@ export default function MemesPage() {
 
   async function excluir(id: string) {
     const supabase = supabaseBrowser();
-    const { error } = await supabase.from("memes").delete().eq("id", id);
+    const { error } = await supabase.from("memes").update({ excluido_em: new Date().toISOString() }).eq("id", id);
     if (error) { toast("Erro ao excluir"); return; }
-    toast("Meme removido");
+    toast("Movido pra lixeira");
     if (drawerId === id) setDrawerId(null);
     carregar();
   }
@@ -182,11 +182,11 @@ export default function MemesPage() {
   function cancelarSelecao() { setModoSelecao(false); setSelecionados(new Set()); }
   async function excluirSelecionados() {
     if (selecionados.size === 0) return;
-    if (!window.confirm(`Excluir ${selecionados.size} meme(s) selecionado(s)? Essa ação não pode ser desfeita.`)) return;
+    if (!window.confirm(`Excluir ${selecionados.size} meme(s) selecionado(s)? Vao pra lixeira, da pra restaurar depois.`)) return;
     const supabase = supabaseBrowser();
-    const { error } = await supabase.from("memes").delete().in("id", Array.from(selecionados));
+    const { error } = await supabase.from("memes").update({ excluido_em: new Date().toISOString() }).in("id", Array.from(selecionados));
     if (error) { toast("Erro ao excluir"); return; }
-    toast(`${selecionados.size} meme(s) removido(s)`);
+    toast(`${selecionados.size} meme(s) movido(s) pra lixeira`);
     cancelarSelecao();
     carregar();
   }

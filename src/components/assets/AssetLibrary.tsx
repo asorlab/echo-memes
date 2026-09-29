@@ -79,7 +79,7 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
     if (!user) return;
     if (primeiraCarga.current) setCarregando(true);
     const supabase = supabaseBrowser();
-    const { data } = await supabase.from(config.tabela).select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+    const { data } = await supabase.from(config.tabela).select("*").eq("user_id", user.id).is("excluido_em", null).order("created_at", { ascending: false });
     const carregados = (data as Registro[]) ?? [];
     setItens(carregados);
     if (config.tabelaUsos) {
@@ -132,9 +132,9 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
   }
 
   async function excluir(id: string) {
-    const { error } = await supabaseBrowser().from(config.tabela).delete().eq("id", id);
+    const { error } = await supabaseBrowser().from(config.tabela).update({ excluido_em: new Date().toISOString() }).eq("id", id);
     if (error) { toast("Erro ao excluir"); return; }
-    toast("Removido");
+    toast("Movido pra lixeira");
     if (drawerId === id) setDrawerId(null);
     carregar();
   }
