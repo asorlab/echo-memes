@@ -12,11 +12,12 @@ import Card from "@/components/ui/Card";
 import PageHeader from "@/components/ui/PageHeader";
 import EmptyState from "@/components/ui/EmptyState";
 import EditableField from "@/components/ui/EditableField";
-import type { Audio, AudioUso, Clima, Licenciamento, Momento, Risco } from "@/lib/types";
+import { extrairDuracaoAudio } from "@/lib/metadados";
+import type { Audio, AudioUso, CategoriaSfx, Clima, Licenciamento, Momento, Risco, TipoAudio } from "@/lib/types";
 
 interface AudioRow {
-  id: string; titulo: string; arquivo_url: string | null; artista: string | null;
-  licenciamento: Licenciamento | null; clima: Clima | null; bpm: number | null;
+  id: string; titulo: string; arquivo_url: string | null; tipo: TipoAudio | null; categoria_sfx: CategoriaSfx | null;
+  artista: string | null; licenciamento: Licenciamento | null; clima: Clima | null; bpm: number | null;
   momento: Momento | null; risco: Risco | null; duracao_seg: number | null; tags: string[];
   link_origem: string | null; favorito: boolean; created_at: string;
 }
@@ -24,15 +25,25 @@ interface AudioUsoRow { id: string; audio_id: string; contexto: string; data: st
 
 function mapAudio(r: AudioRow): Audio {
   return {
-    id: r.id, titulo: r.titulo, arquivoUrl: r.arquivo_url, artista: r.artista, licenciamento: r.licenciamento,
-    clima: r.clima, bpm: r.bpm, momento: r.momento, risco: r.risco, duracaoSeg: r.duracao_seg,
-    tags: r.tags ?? [], linkOrigem: r.link_origem, favorito: r.favorito, criadoEm: r.created_at,
+    id: r.id, titulo: r.titulo, arquivoUrl: r.arquivo_url, tipo: r.tipo, categoriaSfx: r.categoria_sfx,
+    artista: r.artista, licenciamento: r.licenciamento, clima: r.clima, bpm: r.bpm, momento: r.momento,
+    risco: r.risco, duracaoSeg: r.duracao_seg, tags: r.tags ?? [], linkOrigem: r.link_origem,
+    favorito: r.favorito, criadoEm: r.created_at,
   };
 }
 function mapUso(r: AudioUsoRow): AudioUso {
   return { id: r.id, audioId: r.audio_id, contexto: r.contexto, data: r.data };
 }
 
+const TIPOS: { id: TipoAudio; rotulo: string }[] = [
+  { id: "sfx", rotulo: "SFX" }, { id: "musica", rotulo: "Música" }, { id: "fala", rotulo: "Fala" },
+  { id: "trend", rotulo: "Trend" }, { id: "ambiente", rotulo: "Ambiente" },
+];
+const CATEGORIAS_SFX: { id: CategoriaSfx; rotulo: string }[] = [
+  { id: "whoosh", rotulo: "Whoosh" }, { id: "impacto", rotulo: "Impacto" }, { id: "notificacao", rotulo: "Notificação" },
+  { id: "transicao", rotulo: "Transição" }, { id: "risada", rotulo: "Risada" }, { id: "erro", rotulo: "Erro" },
+  { id: "sucesso", rotulo: "Sucesso" }, { id: "ambiente", rotulo: "Ambiente" }, { id: "outro", rotulo: "Outro" },
+];
 const CLIMAS: { id: Clima; rotulo: string }[] = [
   { id: "upbeat", rotulo: "Upbeat" }, { id: "calmo", rotulo: "Calmo" }, { id: "tenso", rotulo: "Tenso" },
   { id: "emotivo", rotulo: "Emotivo" }, { id: "epico", rotulo: "Épico" }, { id: "engracado", rotulo: "Engraçado" },
@@ -50,16 +61,6 @@ const LICENCIAMENTOS: { id: Licenciamento; rotulo: string; icone: typeof ShieldC
   { id: "desconhecido", rotulo: "Desconhecido", icone: ShieldQuestion },
 ];
 
-function extrairDuracaoAudio(arquivo: File): Promise<number | null> {
-  return new Promise((resolve) => {
-    const audio = document.createElement("audio");
-    audio.preload = "metadata";
-    audio.onloadedmetadata = () => { URL.revokeObjectURL(audio.src); resolve(Number.isFinite(audio.duration) ? audio.duration : null); };
-    audio.onerror = () => { URL.revokeObjectURL(audio.src); resolve(null); };
-    audio.src = URL.createObjectURL(arquivo);
-  });
-}
-
 export default function AudiosPage() {
   const { user } = useUser();
   const toast = useToast();
@@ -67,7 +68,7 @@ export default function AudiosPage() {
   const [usos, setUsos] = useState<AudioUso[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [busca, setBusca] = useState("");
-  const [climaAtivo, setClimaAtivo] = useState<Clima | null>(null);
+  const [tipoAtivo, setTipoAtivo] = useState<TipoAudio | null>(null);
   const [soFavoritos, setSoFavoritos] = useState(false);
   const [soLicenciados, setSoLicenciados] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -97,14 +98,14 @@ export default function AudiosPage() {
     setEnviando(true);
     try {
       for (const arquivo of Array.from(arquivos)) {
-        const [url, duracao] = await Promise.all([
+        const [url, metadados] = await Promise.all([
           enviarArquivo("audios", user.id, arquivo),
           extrairDuracaoAudio(arquivo),
         ]);
         const titulo = arquivo.name.replace(/\.[^.]+$/, "").slice(0, 60) || "Novo áudio";
         await supabaseBrowser().from("audios").insert({
-          user_id: user.id, titulo, arquivo_url: url,
-          duracao_seg: duracao ? Math.round(duracao * 10) / 10 : null,
+          user_id: user.id, titulo, arquivo_url: url, tipo: tipoAtivo ?? "musica",
+          ...(metadados ?? {}),
         });
       }
       toast(arquivos.length > 1 ? `${arquivos.length} áudios adicionados` : "Áudio adicionado");
@@ -117,8 +118,9 @@ export default function AudiosPage() {
   }
 
   async function atualizar(id: string, patch: Partial<{
-    titulo: string; artista: string | null; licenciamento: Licenciamento | null; clima: Clima | null;
-    bpm: number | null; momento: Momento | null; risco: Risco | null; tags: string[]; favorito: boolean;
+    titulo: string; tipo: TipoAudio | null; categoria_sfx: CategoriaSfx | null; artista: string | null;
+    licenciamento: Licenciamento | null; clima: Clima | null; bpm: number | null; momento: Momento | null;
+    risco: Risco | null; tags: string[]; favorito: boolean;
   }>) {
     const supabase = supabaseBrowser();
     const { error } = await supabase.from("audios").update(patch).eq("id", id);
@@ -153,7 +155,7 @@ export default function AudiosPage() {
       const blob = await resposta.blob();
       const url = URL.createObjectURL(blob);
       const extensao = item.arquivoUrl.split("?")[0].split(".").pop() || "mp3";
-      const nome = `${(item.clima ?? "audio")}_${item.titulo}`.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+      const nome = `${(item.tipo ?? "audio")}_${item.titulo}`.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
       const a = document.createElement("a");
       a.href = url; a.download = `${nome}.${extensao}`;
       document.body.appendChild(a); a.click(); a.remove();
@@ -170,7 +172,7 @@ export default function AudiosPage() {
   }, [usos]);
 
   const filtrados = itens.filter((a) => {
-    if (climaAtivo && a.clima !== climaAtivo) return false;
+    if (tipoAtivo && a.tipo !== tipoAtivo) return false;
     if (soFavoritos && !a.favorito) return false;
     if (soLicenciados && a.licenciamento !== "licenciado") return false;
     if (!busca.trim()) return true;
@@ -184,7 +186,7 @@ export default function AudiosPage() {
     <div>
       <PageHeader
         titulo="Áudios"
-        descricao="Trilhas e músicas — clima, BPM, licenciamento."
+        descricao="SFX, músicas, falas, trends e ambientes — tudo que toca."
         acao={
           <button onClick={() => fileInputRef.current?.click()} disabled={enviando} className="flex min-h-[44px] items-center gap-2 rounded-md bg-teal-500 px-4 text-sm font-medium text-neutral-950 hover:opacity-90 disabled:opacity-50">
             <Plus className="h-4 w-4" /> {enviando ? "Enviando..." : "Adicionar"}
@@ -198,11 +200,15 @@ export default function AudiosPage() {
         <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por título, artista ou tag…" className="w-full bg-transparent text-sm text-neutral-200 placeholder-neutral-600 outline-none" />
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-1.5">
-        <button onClick={() => setClimaAtivo(null)} className={`rounded-full border px-2.5 py-1 text-[11px] font-mono ${!climaAtivo ? "border-teal-500/50 bg-teal-500/10 text-teal-300" : "border-neutral-800 text-neutral-500 hover:text-neutral-300"}`}>Todos</button>
-        {CLIMAS.map((c) => (
-          <button key={c.id} onClick={() => setClimaAtivo(c.id === climaAtivo ? null : c.id)} className={`rounded-full border px-2.5 py-1 text-[11px] font-mono ${climaAtivo === c.id ? "border-teal-500/50 bg-teal-500/10 text-teal-300" : "border-neutral-800 text-neutral-500 hover:text-neutral-300"}`}>{c.rotulo}</button>
+      <div className="mb-2 flex flex-wrap items-center gap-1.5">
+        <button onClick={() => setTipoAtivo(null)} className={`rounded-full border px-2.5 py-1 text-[11px] font-mono ${!tipoAtivo ? "border-teal-500/50 bg-teal-500/10 text-teal-300" : "border-neutral-800 text-neutral-500 hover:text-neutral-300"}`}>Todos</button>
+        {TIPOS.map((t) => (
+          <button key={t.id} onClick={() => setTipoAtivo(t.id === tipoAtivo ? null : t.id)} className={`rounded-full border px-2.5 py-1 text-[11px] font-mono ${tipoAtivo === t.id ? "border-teal-500/50 bg-teal-500/10 text-teal-300" : "border-neutral-800 text-neutral-500 hover:text-neutral-300"}`}>{t.rotulo}</button>
         ))}
+      </div>
+      <p className="mb-2 text-[10px] text-neutral-600">Novos arquivos entram como &quot;{TIPOS.find((t) => t.id === tipoAtivo)?.rotulo ?? "Música"}&quot; — escolhe o tipo no filtro acima antes de enviar.</p>
+
+      <div className="mb-4 flex flex-wrap items-center gap-1.5">
         <button onClick={() => setSoFavoritos((v) => !v)} className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-mono ${soFavoritos ? "border-amber-500/50 bg-amber-500/10 text-amber-300" : "border-neutral-800 text-neutral-500 hover:text-neutral-300"}`}>
           <Star className="h-3 w-3" /> Favoritos
         </button>
@@ -230,7 +236,9 @@ export default function AudiosPage() {
                 </div>
                 {a.arquivoUrl && <audio src={a.arquivoUrl} controls className="mb-2 h-8 w-full" onClick={(e) => e.stopPropagation()} />}
                 <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-neutral-500">
-                  {a.clima && <span className="rounded-full bg-teal-500/10 px-1.5 py-0.5 text-teal-300">{CLIMAS.find((c) => c.id === a.clima)?.rotulo}</span>}
+                  {a.tipo && <span className="rounded-full bg-teal-500/10 px-1.5 py-0.5 text-teal-300">{TIPOS.find((t) => t.id === a.tipo)?.rotulo}</span>}
+                  {a.categoriaSfx && <span className="rounded-full bg-neutral-800 px-1.5 py-0.5 text-neutral-400">{CATEGORIAS_SFX.find((c) => c.id === a.categoriaSfx)?.rotulo}</span>}
+                  {a.clima && <span className="rounded-full bg-neutral-800 px-1.5 py-0.5 text-neutral-400">{CLIMAS.find((c) => c.id === a.clima)?.rotulo}</span>}
                   {a.bpm != null && <span>{a.bpm} BPM</span>}
                   {a.duracaoSeg != null && <span>{Math.round(a.duracaoSeg)}s</span>}
                   {a.licenciamento === "licenciado" && <ShieldCheck className="h-3 w-3 text-teal-400" />}
@@ -266,36 +274,61 @@ export default function AudiosPage() {
                 )}
               </div>
               <EditableField value={drawerItem.titulo} onSave={(v) => atualizar(drawerItem.id, { titulo: v })} displayClassName="text-lg font-semibold text-neutral-100" />
+
               <div>
-                <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">Artista / fonte</p>
-                <EditableField value={drawerItem.artista ?? ""} placeholder="Quem fez essa música" onSave={(v) => atualizar(drawerItem.id, { artista: v || null })} displayClassName="text-sm text-neutral-200" />
+                <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">Tipo</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {TIPOS.map((t) => (
+                    <button key={t.id} onClick={() => atualizar(drawerItem.id, { tipo: t.id })} className={`rounded-full border px-2.5 py-1 text-[11px] ${drawerItem.tipo === t.id ? "border-teal-500/50 bg-teal-500/10 text-teal-300" : "border-neutral-800 text-neutral-500"}`}>{t.rotulo}</button>
+                  ))}
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+
+              {drawerItem.tipo === "sfx" && (
                 <div>
-                  <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">Clima</p>
-                  <select value={drawerItem.clima ?? ""} onChange={(e) => atualizar(drawerItem.id, { clima: (e.target.value || null) as Clima | null })} className="w-full rounded-md border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-100 outline-none">
-                    <option value="">Sem clima definido</option>
-                    {CLIMAS.map((c) => <option key={c.id} value={c.id}>{c.rotulo}</option>)}
+                  <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">Categoria do SFX</p>
+                  <select value={drawerItem.categoriaSfx ?? ""} onChange={(e) => atualizar(drawerItem.id, { categoria_sfx: (e.target.value || null) as CategoriaSfx | null })} className="w-full rounded-md border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-100 outline-none">
+                    <option value="">Sem categoria</option>
+                    {CATEGORIAS_SFX.map((c) => <option key={c.id} value={c.id}>{c.rotulo}</option>)}
                   </select>
                 </div>
-                <div>
-                  <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">BPM</p>
-                  <input type="number" value={drawerItem.bpm ?? ""} onChange={(e) => atualizar(drawerItem.id, { bpm: e.target.value ? Number(e.target.value) : null })} placeholder="ex.: 120" className="w-full rounded-md border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-100 outline-none" />
-                </div>
-              </div>
-              <div>
-                <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">Licenciamento</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {LICENCIAMENTOS.map((l) => {
-                    const Icone = l.icone;
-                    return (
-                      <button key={l.id} onClick={() => atualizar(drawerItem.id, { licenciamento: l.id === drawerItem.licenciamento ? null : l.id })} className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] ${drawerItem.licenciamento === l.id ? "border-teal-500/50 bg-teal-500/10 text-teal-300" : "border-neutral-800 text-neutral-500"}`}>
-                        <Icone className="h-3 w-3" /> {l.rotulo}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+              )}
+
+              {drawerItem.tipo !== "sfx" && (
+                <>
+                  <div>
+                    <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">Artista / fonte</p>
+                    <EditableField value={drawerItem.artista ?? ""} placeholder="Quem fez esse áudio" onSave={(v) => atualizar(drawerItem.id, { artista: v || null })} displayClassName="text-sm text-neutral-200" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">Clima</p>
+                      <select value={drawerItem.clima ?? ""} onChange={(e) => atualizar(drawerItem.id, { clima: (e.target.value || null) as Clima | null })} className="w-full rounded-md border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-100 outline-none">
+                        <option value="">Sem clima definido</option>
+                        {CLIMAS.map((c) => <option key={c.id} value={c.id}>{c.rotulo}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">BPM</p>
+                      <input type="number" value={drawerItem.bpm ?? ""} onChange={(e) => atualizar(drawerItem.id, { bpm: e.target.value ? Number(e.target.value) : null })} placeholder="ex.: 120" className="w-full rounded-md border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-100 outline-none" />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">Licenciamento</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {LICENCIAMENTOS.map((l) => {
+                        const Icone = l.icone;
+                        return (
+                          <button key={l.id} onClick={() => atualizar(drawerItem.id, { licenciamento: l.id === drawerItem.licenciamento ? null : l.id })} className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] ${drawerItem.licenciamento === l.id ? "border-teal-500/50 bg-teal-500/10 text-teal-300" : "border-neutral-800 text-neutral-500"}`}>
+                            <Icone className="h-3 w-3" /> {l.rotulo}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
+
               <div>
                 <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">Momento de edição</p>
                 <div className="flex flex-wrap gap-1.5">

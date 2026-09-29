@@ -3,9 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  Radio, Sparkles, LogOut, X, ChevronDown, Volume2, AudioLines, Layers,
-  ArrowRightLeft, SlidersHorizontal, LayoutTemplate, Type, Gem, Palette,
-  Compass, Camera, Anchor, Lightbulb,
+  Radio, Sparkles, LogOut, X, ChevronDown, AudioLines, ImageIcon, LayoutTemplate, Compass, Lightbulb,
 } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
@@ -13,7 +11,7 @@ interface ItemNav {
   id: string;
   nome: string;
   icone: typeof Sparkles;
-  href: string | null;
+  href: string;
 }
 
 interface GrupoNav {
@@ -22,41 +20,26 @@ interface GrupoNav {
   itens: ItemNav[];
 }
 
-// So "Memes" esta implementado por enquanto — o resto e a arquitetura de
-// navegacao da biblioteca preparada de antemao. Cada secao vai ganhar campos
-// e comportamento proprios quando for construida (nao e so aplicar os
-// campos de Memes em tudo — um SFX, uma fonte e um meme sao coisas
-// diferentes). Adicionar uma biblioteca nova = so acrescentar um item aqui.
+// Estrutura consolidada — poucas bibliotecas grandes, cada uma com tipos/
+// tags/filtros internos (SFX vive dentro de Audios, Overlays/Transicoes/
+// Presets vivem dentro de Visuais, Shots/Hooks vivem dentro de
+// Inspiracoes), em vez de uma pagina pra cada subtipo.
 const GRUPOS: GrupoNav[] = [
   {
     id: "edicao",
     rotulo: "Edição",
     itens: [
       { id: "memes", nome: "Memes", icone: Sparkles, href: "/" },
-      { id: "sfx", nome: "SFX", icone: Volume2, href: "/sfx" },
       { id: "audios", nome: "Áudios", icone: AudioLines, href: "/audios" },
-      { id: "overlays", nome: "Overlays", icone: Layers, href: "/overlays" },
-      { id: "transicoes", nome: "Transições", icone: ArrowRightLeft, href: "/transicoes" },
-      { id: "presets", nome: "Presets", icone: SlidersHorizontal, href: "/presets" },
+      { id: "visuais", nome: "Visuais", icone: ImageIcon, href: "/visuais" },
       { id: "templates", nome: "Templates", icone: LayoutTemplate, href: "/templates" },
-    ],
-  },
-  {
-    id: "identidade",
-    rotulo: "Identidade",
-    itens: [
-      { id: "fontes", nome: "Fontes", icone: Type, href: "/fontes" },
-      { id: "brand", nome: "Brand Assets", icone: Gem, href: "/brand" },
-      { id: "paletas", nome: "Paletas/Looks", icone: Palette, href: "/paletas" },
     ],
   },
   {
     id: "referencias",
     rotulo: "Referências",
     itens: [
-      { id: "edicoes-ref", nome: "Edições", icone: Compass, href: "/edicoes" },
-      { id: "shots", nome: "Shots", icone: Camera, href: "/shots" },
-      { id: "hooks", nome: "Hooks", icone: Anchor, href: "/hooks" },
+      { id: "edicoes-ref", nome: "Edits", icone: Compass, href: "/edicoes" },
       { id: "inspiracoes", nome: "Inspirações", icone: Lightbulb, href: "/inspiracoes" },
     ],
   },
@@ -102,10 +85,7 @@ export default function Sidebar({ aberta = false, fechar = () => {} }: SidebarPr
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-teal-500/10 text-teal-400">
             <Radio className="h-4 w-4" />
           </div>
-          <div className="min-w-0">
-            <span className="block font-mono text-sm font-semibold tracking-tight text-neutral-100">ECHO // ASSETS</span>
-            <span className="block truncate text-[10px] text-neutral-600">Biblioteca criativa</span>
-          </div>
+          <span className="font-mono text-sm font-semibold tracking-tight text-neutral-100">ECHO // ASSETS</span>
           <button onClick={fechar} className="ml-auto shrink-0 text-neutral-500 hover:text-neutral-300 md:hidden">
             <X className="h-4 w-4" />
           </button>
@@ -127,23 +107,18 @@ export default function Sidebar({ aberta = false, fechar = () => {} }: SidebarPr
                   <div className="space-y-0.5">
                     {grupo.itens.map((item) => {
                       const Icone = item.icone;
-                      const ativo = item.href !== null && pathname === item.href;
-                      const disponivel = item.href !== null;
+                      const ativo = pathname === item.href;
                       return (
                         <button
                           key={item.id}
-                          disabled={!disponivel}
-                          onClick={() => { if (item.href) { router.push(item.href); fechar(); } }}
+                          onClick={() => { router.push(item.href); fechar(); }}
                           className={`flex min-h-[40px] w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
-                            ativo ? "bg-teal-500/10 text-teal-300" :
-                            disponivel ? "text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200" :
-                            "cursor-default text-neutral-700"
+                            ativo ? "bg-teal-500/10 text-teal-300" : "text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
                           }`}
                         >
                           <Icone className="h-3.5 w-3.5 shrink-0" />
                           <span className="font-mono text-[13px]">{item.nome}</span>
                           {ativo && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-teal-400" />}
-                          {!disponivel && <span className="ml-auto font-mono text-[9px] uppercase tracking-wide text-neutral-700">em breve</span>}
                         </button>
                       );
                     })}

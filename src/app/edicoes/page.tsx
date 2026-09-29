@@ -13,8 +13,21 @@ import EditableField from "@/components/ui/EditableField";
 interface Edicao {
   id: string; titulo: string; arquivo_url: string | null; link_origem: string | null;
   plataforma: string | null; criador: string | null; ideia_uso: string | null;
+  caracteristicas: string[]; status: string | null; formato_conteudo: string[];
   tags: string[]; favorito: boolean; created_at: string;
 }
+
+const CARACTERISTICAS = [
+  { id: "hook", rotulo: "Hook" }, { id: "cortes", rotulo: "Cortes" }, { id: "ritmo", rotulo: "Ritmo" },
+  { id: "legenda", rotulo: "Legenda" }, { id: "zoom", rotulo: "Zoom" }, { id: "transicao", rotulo: "Transição" },
+  { id: "sfx", rotulo: "SFX" }, { id: "color", rotulo: "Color" }, { id: "b_roll", rotulo: "B-roll" },
+  { id: "enquadramento", rotulo: "Enquadramento" }, { id: "storytelling", rotulo: "Storytelling" }, { id: "timing_comico", rotulo: "Timing cômico" },
+];
+const FORMATOS_CONTEUDO = [
+  { id: "vlog", rotulo: "Vlog" }, { id: "grwm", rotulo: "GRWM" }, { id: "gaming", rotulo: "Gaming" },
+  { id: "lifestyle", rotulo: "Lifestyle" }, { id: "cover", rotulo: "Cover" }, { id: "asmr", rotulo: "ASMR" }, { id: "short_form", rotulo: "Short-form" },
+];
+const STATUS_OPCOES = [{ id: "quero_testar", rotulo: "Quero testar" }, { id: "testado", rotulo: "Testado" }];
 interface Timestamp { id: string; edicao_id: string; inicio_seg: number; fim_seg: number | null; nota: string; }
 
 function formatarTempo(seg: number): string {
@@ -198,6 +211,36 @@ export default function EdicoesPage() {
               <div>
                 <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">O que quero pegar daqui</p>
                 <EditableField as="textarea" value={drawerItem.ideia_uso ?? ""} placeholder='Ex.: "ritmo da intro", "estilo da legenda", "color"...' onSave={(v) => atualizar(drawerItem.id, { ideia_uso: v || null })} displayClassName="text-sm text-neutral-200" />
+              </div>
+              <div>
+                <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">O que chamou atenção</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {CARACTERISTICAS.map((c) => {
+                    const sel = drawerItem.caracteristicas.includes(c.id);
+                    return (
+                      <button key={c.id} onClick={() => atualizar(drawerItem.id, { caracteristicas: sel ? drawerItem.caracteristicas.filter((x) => x !== c.id) : [...drawerItem.caracteristicas, c.id] })} className={`rounded-full border px-2.5 py-1 text-[11px] ${sel ? "border-teal-500/50 bg-teal-500/10 text-teal-300" : "border-neutral-800 text-neutral-500"}`}>{c.rotulo}</button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">Status</p>
+                <div className="flex gap-1.5">
+                  {STATUS_OPCOES.map((s) => (
+                    <button key={s.id} onClick={() => atualizar(drawerItem.id, { status: s.id === drawerItem.status ? null : s.id })} className={`rounded-full border px-2.5 py-1 text-[11px] ${drawerItem.status === s.id ? "border-teal-500/50 bg-teal-500/10 text-teal-300" : "border-neutral-800 text-neutral-500"}`}>{s.rotulo}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">Onde usar</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {FORMATOS_CONTEUDO.map((f) => {
+                    const sel = drawerItem.formato_conteudo.includes(f.id);
+                    return (
+                      <button key={f.id} onClick={() => atualizar(drawerItem.id, { formato_conteudo: sel ? drawerItem.formato_conteudo.filter((x) => x !== f.id) : [...drawerItem.formato_conteudo, f.id] })} className={`rounded-full border px-2.5 py-1 text-[11px] ${sel ? "border-teal-500/50 bg-teal-500/10 text-teal-300" : "border-neutral-800 text-neutral-500"}`}>{f.rotulo}</button>
+                    );
+                  })}
+                </div>
               </div>
               <div>
                 <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">Tags</p>

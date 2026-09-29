@@ -15,7 +15,7 @@ export interface OpcaoCampo { id: string; rotulo: string }
 export interface CampoConfig {
   key: string;
   label: string;
-  tipo: "select" | "text" | "textarea" | "number" | "tags" | "boolean" | "chips";
+  tipo: "select" | "text" | "textarea" | "number" | "tags" | "boolean" | "chips" | "chips-multi";
   opcoes?: OpcaoCampo[];
   placeholder?: string;
 }
@@ -207,6 +207,22 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
               key={o.id}
               onClick={() => onSave(o.id === sel ? null : o.id)}
               className={`rounded-full border px-2.5 py-1 text-[11px] ${sel === o.id ? "border-teal-500/50 bg-teal-500/10 text-teal-300" : "border-neutral-800 text-neutral-500"}`}
+            >
+              {o.rotulo}
+            </button>
+          ))}
+        </div>
+      );
+    }
+    if (campo.tipo === "chips-multi") {
+      const sel = (valor as string[]) ?? [];
+      return (
+        <div className="flex flex-wrap gap-1.5">
+          {campo.opcoes?.map((o) => (
+            <button
+              key={o.id}
+              onClick={() => onSave(sel.includes(o.id) ? sel.filter((s) => s !== o.id) : [...sel, o.id])}
+              className={`rounded-full border px-2.5 py-1 text-[11px] ${sel.includes(o.id) ? "border-teal-500/50 bg-teal-500/10 text-teal-300" : "border-neutral-800 text-neutral-500"}`}
             >
               {o.rotulo}
             </button>
