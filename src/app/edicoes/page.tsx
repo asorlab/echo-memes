@@ -63,17 +63,18 @@ export default function EdicoesPage() {
     if (!user) return;
     if (primeiraCarga.current) setCarregando(true);
     const supabase = supabaseBrowser();
-    const [{ data }, { data: tsData }] = await Promise.all([
+    const [{ data, error }, { data: tsData }] = await Promise.all([
       supabase.from("edicoes_referencia").select("*").eq("user_id", user.id).is("excluido_em", null).order("created_at", { ascending: false }),
       supabase.from("edicoes_timestamps").select("*").eq("user_id", user.id).order("inicio_seg"),
     ]);
+    setCarregando(false);
+    primeiraCarga.current = false;
+    if (error) { toast(`Erro ao carregar edits: ${error.message}`); return; }
     const carregados = (data as Edicao[]) ?? [];
     setItens(carregados);
     setTimestamps((tsData as Timestamp[]) ?? []);
-    setCarregando(false);
-    primeiraCarga.current = false;
     urlsAssinadas(carregados.map((e) => e.arquivo_url)).then(setUrls);
-  }, [user]);
+  }, [user, toast]);
 
   useEffect(() => { carregar(); }, [carregar]);
 

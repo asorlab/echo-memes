@@ -82,17 +82,18 @@ export default function VisuaisPage() {
     if (!user) return;
     if (primeiraCarga.current) setCarregando(true);
     const supabase = supabaseBrowser();
-    const [{ data }, { data: usosData }] = await Promise.all([
+    const [{ data, error }, { data: usosData }] = await Promise.all([
       supabase.from("visuais").select("*").eq("user_id", user.id).is("excluido_em", null).order("created_at", { ascending: false }),
       supabase.from("visuais_usos").select("*").eq("user_id", user.id).order("data", { ascending: false }),
     ]);
+    setCarregando(false);
+    primeiraCarga.current = false;
+    if (error) { toast(`Erro ao carregar visuais: ${error.message}`); return; }
     const carregados = ((data as VisualRow[]) ?? []).map(mapVisual);
     setItens(carregados);
     setUsos(((usosData as VisualUsoRow[]) ?? []).map(mapUso));
-    setCarregando(false);
-    primeiraCarga.current = false;
     urlsAssinadas(carregados.map((v) => v.arquivoUrl)).then(setUrls);
-  }, [user]);
+  }, [user, toast]);
 
   useEffect(() => { carregar(); }, [carregar]);
 

@@ -79,17 +79,18 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
     if (!user) return;
     if (primeiraCarga.current) setCarregando(true);
     const supabase = supabaseBrowser();
-    const { data } = await supabase.from(config.tabela).select("*").eq("user_id", user.id).is("excluido_em", null).order("created_at", { ascending: false });
+    const { data, error } = await supabase.from(config.tabela).select("*").eq("user_id", user.id).is("excluido_em", null).order("created_at", { ascending: false });
+    setCarregando(false);
+    primeiraCarga.current = false;
+    if (error) { toast(`Erro ao carregar: ${error.message}`); return; }
     const carregados = (data as Registro[]) ?? [];
     setItens(carregados);
     if (config.tabelaUsos) {
       const { data: usosData } = await supabase.from(config.tabelaUsos).select("*").eq("user_id", user.id).order("data", { ascending: false });
       setUsos((usosData as Registro[]) ?? []);
     }
-    setCarregando(false);
-    primeiraCarga.current = false;
     urlsAssinadas(carregados.map((it) => it.arquivo_url)).then(setUrls);
-  }, [user, config.tabela, config.tabelaUsos]);
+  }, [user, config.tabela, config.tabelaUsos, toast]);
 
   useEffect(() => { carregar(); }, [carregar]);
 

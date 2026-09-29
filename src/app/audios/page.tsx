@@ -82,17 +82,18 @@ export default function AudiosPage() {
     if (!user) return;
     if (primeiraCarga.current) setCarregando(true);
     const supabase = supabaseBrowser();
-    const [{ data }, { data: usosData }] = await Promise.all([
+    const [{ data, error }, { data: usosData }] = await Promise.all([
       supabase.from("audios").select("*").eq("user_id", user.id).is("excluido_em", null).order("created_at", { ascending: false }),
       supabase.from("audios_usos").select("*").eq("user_id", user.id).order("data", { ascending: false }),
     ]);
+    setCarregando(false);
+    primeiraCarga.current = false;
+    if (error) { toast(`Erro ao carregar áudios: ${error.message}`); return; }
     const carregados = ((data as AudioRow[]) ?? []).map(mapAudio);
     setItens(carregados);
     setUsos(((usosData as AudioUsoRow[]) ?? []).map(mapUso));
-    setCarregando(false);
-    primeiraCarga.current = false;
     urlsAssinadas(carregados.map((a) => a.arquivoUrl)).then(setUrls);
-  }, [user]);
+  }, [user, toast]);
 
   useEffect(() => { carregar(); }, [carregar]);
 

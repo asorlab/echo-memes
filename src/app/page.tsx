@@ -126,17 +126,23 @@ export default function MemesPage() {
     if (!user) return;
     if (primeiraCarga.current) setCarregando(true);
     const supabase = supabaseBrowser();
-    const [{ data }, { data: usosData }] = await Promise.all([
+    const [{ data, error }, { data: usosData }] = await Promise.all([
       supabase.from("memes").select("*").eq("user_id", user.id).is("excluido_em", null).order("created_at", { ascending: false }),
       supabase.from("memes_usos").select("*").eq("user_id", user.id).order("data", { ascending: false }),
     ]);
+    setCarregando(false);
+    primeiraCarga.current = false;
+    if (error) {
+      // Nunca esvazia a lista em cima de um erro de carregamento — senao
+      // um problema passageiro (ou uma coluna faltando) parece "sumiu tudo".
+      toast(`Erro ao carregar memes: ${error.message}`);
+      return;
+    }
     const memesCarregados = ((data as MemeRow[]) ?? []).map(mapMeme);
     setMemes(memesCarregados);
     setUsos(((usosData as MemeUsoRow[]) ?? []).map(mapUso));
-    setCarregando(false);
-    primeiraCarga.current = false;
     urlsAssinadas(memesCarregados.map((m) => m.imagemUrl)).then(setUrls);
-  }, [user]);
+  }, [user, toast]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
