@@ -45,9 +45,9 @@ const GRUPOS: GrupoNav[] = [
     id: "identidade",
     rotulo: "Identidade",
     itens: [
-      { id: "fontes", nome: "Fontes", icone: Type, href: null },
-      { id: "brand", nome: "Brand Assets", icone: Gem, href: null },
-      { id: "paletas", nome: "Paletas/Looks", icone: Palette, href: null },
+      { id: "fontes", nome: "Fontes", icone: Type, href: "/fontes" },
+      { id: "brand", nome: "Brand Assets", icone: Gem, href: "/brand" },
+      { id: "paletas", nome: "Paletas/Looks", icone: Palette, href: "/paletas" },
     ],
   },
   {
