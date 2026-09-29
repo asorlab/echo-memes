@@ -1,13 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Trash2, Compass, Search, Star, X, ExternalLink, Clock } from "lucide-react";
+import { Plus, Trash2, Search, Star, X, ExternalLink, Clock, Film } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useUser } from "@/lib/useUser";
 import { useToast } from "@/components/ToastProvider";
-import Card from "@/components/ui/Card";
-import PageHeader from "@/components/ui/PageHeader";
-import EmptyState from "@/components/ui/EmptyState";
 import EditableField from "@/components/ui/EditableField";
 
 interface Edicao {
@@ -49,12 +46,14 @@ export default function EdicoesPage() {
   const [timestamps, setTimestamps] = useState<Timestamp[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [busca, setBusca] = useState("");
-  const [soFavoritos, setSoFavoritos] = useState(false);
+  const [buscaAberta, setBuscaAberta] = useState(false);
+  const [filtro, setFiltro] = useState<"todos" | "favoritos" | "quero_testar" | "testado">("todos");
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const [novoInicio, setNovoInicio] = useState("");
   const [novoFim, setNovoFim] = useState("");
   const [novaNota, setNovaNota] = useState("");
   const [novoLink, setNovoLink] = useState("");
+  const [adicionarAberto, setAdicionarAberto] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const primeiraCarga = useRef(true);
@@ -129,7 +128,9 @@ export default function EdicoesPage() {
   }, [timestamps]);
 
   const filtrados = itens.filter((e) => {
-    if (soFavoritos && !e.favorito) return false;
+    if (filtro === "favoritos" && !e.favorito) return false;
+    if (filtro === "quero_testar" && e.status !== "quero_testar") return false;
+    if (filtro === "testado" && e.status !== "testado") return false;
     if (!busca.trim()) return true;
     const alvo = busca.trim().toLowerCase();
     return e.titulo.toLowerCase().includes(alvo) || (e.ideia_uso ?? "").toLowerCase().includes(alvo) || e.tags.some((t) => t.includes(alvo));
@@ -138,43 +139,91 @@ export default function EdicoesPage() {
   const drawerItem = drawerId ? itens.find((e) => e.id === drawerId) ?? null : null;
   const ehVideoLocal = drawerItem?.arquivo_url && [".mp4", ".webm", ".mov", ".m4v"].some((ext) => drawerItem.arquivo_url!.toLowerCase().endsWith(ext));
 
+  function dominio(url: string): string {
+    try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; }
+  }
+
   return (
     <div>
-      <PageHeader titulo="Edições" descricao="Vídeos de referência — o que quero pegar daqui, com os trechos marcados." />
-
-      <div className="mb-3 flex items-center gap-2">
-        <input value={novoLink} onChange={(e) => setNovoLink(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") adicionar(); }} placeholder="Cola o link do vídeo de referência…" className="min-h-[40px] flex-1 rounded-md border border-neutral-800 bg-neutral-900 px-3 text-sm text-neutral-200 placeholder-neutral-600 outline-none" />
-        <button onClick={adicionar} className="flex min-h-[40px] items-center gap-1.5 rounded-md bg-teal-500 px-3 text-xs font-medium text-neutral-950 hover:opacity-90"><Plus className="h-3.5 w-3.5" /> Adicionar</button>
+      <div className="mb-3 flex items-center justify-between">
+        <h1 className="text-lg font-semibold text-neutral-100">Edits</h1>
+        <div className="relative">
+          <button onClick={() => setAdicionarAberto((v) => !v)} className="flex min-h-[32px] items-center gap-1.5 rounded-md bg-teal-500 px-2.5 text-xs font-medium text-neutral-950 hover:opacity-90">
+            <Plus className="h-3.5 w-3.5" /> Adicionar
+          </button>
+          {adicionarAberto && (
+            <div className="absolute right-0 top-9 z-10 w-72 rounded-md border border-neutral-800 bg-neutral-950 p-2 shadow-xl">
+              <input
+                autoFocus
+                value={novoLink}
+                onChange={(e) => setNovoLink(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { adicionar(); setAdicionarAberto(false); } if (e.key === "Escape") setAdicionarAberto(false); }}
+                placeholder="Cola o link do vídeo…"
+                className="w-full rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-1.5 text-sm text-neutral-200 placeholder-neutral-600 outline-none"
+              />
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="mb-4 flex items-center gap-2 rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2">
-        <Search className="h-4 w-4 shrink-0 text-neutral-500" />
-        <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por título, ideia de uso ou tag…" className="w-full bg-transparent text-sm text-neutral-200 placeholder-neutral-600 outline-none" />
-        <button onClick={() => setSoFavoritos((v) => !v)} className={`flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] ${soFavoritos ? "border-amber-500/50 bg-amber-500/10 text-amber-300" : "border-neutral-800 text-neutral-500"}`}>
-          <Star className="h-3 w-3" /> Favoritos
-        </button>
+      <div className="mb-4 flex flex-wrap items-center gap-1.5">
+        {([["todos", "Todos"], ["favoritos", "Favoritos"], ["quero_testar", "Quero testar"], ["testado", "Testados"]] as const).map(([id, rotulo]) => (
+          <button key={id} onClick={() => setFiltro(id)} className={`rounded-full border px-2.5 py-1 text-[11px] ${filtro === id ? "border-teal-500/50 bg-teal-500/10 text-teal-300" : "border-neutral-800 text-neutral-500 hover:text-neutral-300"}`}>{rotulo}</button>
+        ))}
+        <div className="ml-auto">
+          {buscaAberta ? (
+            <input
+              autoFocus
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              onBlur={() => { if (!busca) setBuscaAberta(false); }}
+              onKeyDown={(e) => { if (e.key === "Escape") { setBusca(""); setBuscaAberta(false); } }}
+              placeholder="Buscar…"
+              className="w-40 rounded-md border border-neutral-800 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 placeholder-neutral-600 outline-none"
+            />
+          ) : (
+            <button onClick={() => setBuscaAberta(true)} className="text-neutral-500 hover:text-neutral-300"><Search className="h-3.5 w-3.5" /></button>
+          )}
+        </div>
       </div>
 
       {carregando ? (
         <p className="py-10 text-center text-sm text-neutral-600">Carregando...</p>
       ) : filtrados.length === 0 ? (
-        <EmptyState icone={Compass} titulo={itens.length === 0 ? "Nenhuma edição salva ainda" : "Nada encontrado"} descricao={itens.length === 0 ? "Cola o link de um vídeo de referência acima." : "Tente outro termo."} />
+        <button onClick={() => setAdicionarAberto(true)} className="flex w-full flex-col items-center gap-2 py-16 text-neutral-600 hover:text-neutral-400">
+          <Film className="h-6 w-6" />
+          <span className="text-sm">{itens.length === 0 ? "Nenhum edit ainda" : "Nada encontrado"}</span>
+          {itens.length === 0 && <span className="text-xs text-teal-500">+ Adicionar</span>}
+        </button>
       ) : (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
           {filtrados.map((e) => {
             const tsDoItem = timestampsPorEdicao[e.id] ?? [];
+            const ehVideo = e.arquivo_url && [".mp4", ".webm", ".mov", ".m4v"].some((ext) => e.arquivo_url!.toLowerCase().endsWith(ext));
             return (
-              <Card key={e.id} className="cursor-pointer p-3 hover:border-teal-500/30" onClick={() => setDrawerId(e.id)}>
-                <div className="mb-1 flex items-start justify-between gap-2">
-                  <p className="min-w-0 truncate text-sm font-medium text-neutral-100">{e.titulo}</p>
-                  {e.favorito && <Star className="h-3.5 w-3.5 shrink-0 text-amber-400" fill="currentColor" />}
+              <button key={e.id} onClick={() => setDrawerId(e.id)} className="group text-left">
+                <div className="relative mb-1.5 flex aspect-video items-center justify-center overflow-hidden rounded-md bg-neutral-900">
+                  {ehVideo ? (
+                    <video src={e.arquivo_url!} muted playsInline className="h-full w-full object-cover" />
+                  ) : (
+                    <Film className="h-5 w-5 text-neutral-700" />
+                  )}
+                  {e.favorito && <Star className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-amber-400 drop-shadow" fill="currentColor" />}
+                  {e.status && (
+                    <span className={`absolute bottom-1.5 left-1.5 rounded px-1.5 py-0.5 text-[9px] ${e.status === "quero_testar" ? "bg-amber-500/90 text-neutral-950" : "bg-teal-500/90 text-neutral-950"}`}>
+                      {e.status === "quero_testar" ? "Quero testar" : "Testado"}
+                    </span>
+                  )}
+                  {tsDoItem.length > 0 && (
+                    <span className="absolute bottom-1.5 right-1.5 flex items-center gap-0.5 rounded bg-black/70 px-1.5 py-0.5 text-[9px] text-neutral-300">
+                      <Clock className="h-2.5 w-2.5" /> {tsDoItem.length}
+                    </span>
+                  )}
                 </div>
-                {e.link_origem && <p className="mb-1.5 truncate text-[10px] text-sky-400">{e.link_origem}</p>}
-                {e.ideia_uso && <p className="mb-1.5 line-clamp-2 text-xs text-neutral-400">{e.ideia_uso}</p>}
-                {tsDoItem.length > 0 && (
-                  <p className="flex items-center gap-1 text-[10px] text-neutral-500"><Clock className="h-2.5 w-2.5" /> {tsDoItem.length} trecho{tsDoItem.length === 1 ? "" : "s"} marcado{tsDoItem.length === 1 ? "" : "s"}</p>
-                )}
-              </Card>
+                <p className="truncate text-xs font-medium text-neutral-200 group-hover:text-neutral-100">{e.titulo}</p>
+                <p className="truncate text-[10px] text-neutral-600">{e.criador || (e.link_origem && dominio(e.link_origem)) || "—"}</p>
+                {e.tags.length > 0 && <p className="truncate text-[10px] text-neutral-600">{e.tags.slice(0, 2).join(" · ")}</p>}
+              </button>
             );
           })}
         </div>
