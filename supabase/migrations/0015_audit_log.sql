@@ -83,14 +83,21 @@ begin
 end;
 $$;
 
+-- to_regclass checa se a tabela existe antes de tentar criar o trigger —
+-- se alguma das 9 nao existir de verdade no banco (aconteceu com
+-- "visuais"), pula ela com um aviso em vez de abortar a migracao inteira.
 do $$
 declare
   t text;
 begin
   foreach t in array array['memes','audios','visuais','templates','fontes','brand_assets','paletas','inspiracoes','edicoes_referencia']
   loop
-    execute format('drop trigger if exists trg_auditoria_asset on %I', t);
-    execute format('create trigger trg_auditoria_asset after update or delete on %I for each row execute function _log_auditoria_asset()', t);
+    if to_regclass(format('public.%I', t)) is not null then
+      execute format('drop trigger if exists trg_auditoria_asset on %I', t);
+      execute format('create trigger trg_auditoria_asset after update or delete on %I for each row execute function _log_auditoria_asset()', t);
+    else
+      raise notice 'tabela % nao existe — trigger de auditoria NAO criado pra ela', t;
+    end if;
   end loop;
 end $$;
 
