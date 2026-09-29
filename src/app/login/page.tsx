@@ -97,7 +97,7 @@ function FormularioLogin() {
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-teal-500/10 text-teal-400">
             <Radio className="h-4 w-4" />
           </div>
-          <span className="font-mono text-sm font-semibold tracking-tight text-neutral-100">ECHO // MEMES</span>
+          <span className="font-mono text-sm font-semibold tracking-tight text-neutral-100">ECHO // ASSETS</span>
         </div>
 
         {modo === "nova-senha" && (

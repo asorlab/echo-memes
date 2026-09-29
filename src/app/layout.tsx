@@ -3,12 +3,15 @@ import "./globals.css";
 import Shell from "./shell";
 
 export const metadata: Metadata = {
-  title: "ECHO // MEMES",
-  description: "Acervo pessoal de memes — o que é, de onde veio e por que funciona.",
+  title: "ECHO // ASSETS",
+  description: "Biblioteca criativa — memes, SFX, áudios, overlays e tudo que acelera a edição.",
+  icons: {
+    icon: "/favicon.svg",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "ECHO // MEMES",
+    title: "ECHO // ASSETS",
   },
 };
 
