@@ -72,3 +72,30 @@ export interface SfxUso {
   contexto: string;
   data: string;
 }
+
+export type Licenciamento = "licenciado" | "nao_licenciado" | "desconhecido";
+export type Clima = "upbeat" | "calmo" | "tenso" | "emotivo" | "epico" | "engracado" | "misterioso" | "romantico";
+
+export interface Audio {
+  id: string;
+  titulo: string;
+  arquivoUrl: string | null;
+  artista: string | null;
+  licenciamento: Licenciamento | null;
+  clima: Clima | null;
+  bpm: number | null;
+  momento: Momento | null;
+  risco: Risco | null;
+  duracaoSeg: number | null;
+  tags: string[];
+  linkOrigem: string | null;
+  favorito: boolean;
+  criadoEm: string;
+}
+
+export interface AudioUso {
+  id: string;
+  audioId: string;
+  contexto: string;
+  data: string;
+}
