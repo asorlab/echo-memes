@@ -8,30 +8,26 @@ import {
   CircleX,
   Clock3,
   Loader2,
-  Trash2,
   X,
 } from "lucide-react";
 
 import { supabaseBrowser } from "@/lib/supabase/client";
 
-type ImportStatus =
-  | "pending"
-  | "processing"
-  | "completed"
-  | "failed"
-  | "cancelled";
+type StatusRun = "pending" | "discovering" | "processing" | "completed" | "failed" | "cancelled";
 
-interface ImportQueueRow {
+interface ImportRunRow {
   id: string;
-  source_url: string;
-  source_type: string;
-  categoria: string | null;
-  status: ImportStatus;
-  total_items: number | null;
-  processed_items: number | null;
+  source_id: string;
+  status: StatusRun;
+  total_found: number | null;
+  total_new: number | null;
+  total_downloaded: number | null;
+  total_skipped: number | null;
+  total_failed: number | null;
   error_message: string | null;
   created_at: string;
   updated_at: string;
+  import_sources: { username: string; platform: string } | null;
 }
 
 interface ImportActivityProps {
@@ -40,90 +36,42 @@ interface ImportActivityProps {
 }
 
 const INTERVALO_ATUALIZACAO = 5000;
+const ROTULO_PLATAFORMA: Record<string, string> = { tiktok: "TikTok", x: "X" };
 
-function nomeDaFonte(url: string) {
-  try {
-    const parsed = new URL(url);
-    const tiktok = parsed.pathname.match(/^\/@([^/]+)/i);
-
-    if (parsed.hostname.includes("tiktok.com") && tiktok?.[1]) {
-      return `@${decodeURIComponent(tiktok[1])}`;
-    }
-
-    return parsed.hostname.replace(/^www\./, "");
-  } catch {
-    return url.length > 38 ? `${url.slice(0, 35)}...` : url;
-  }
-}
-
-function plataformaDaFonte(url: string) {
-  if (url.toLowerCase().includes("tiktok.com")) return "TikTok";
-  if (/\b(x\.com|twitter\.com)\b/i.test(url)) return "X";
-  return "Importação";
-}
-
-function rotuloStatus(status: ImportStatus) {
+function rotuloStatus(status: StatusRun) {
   if (status === "pending") return "Na fila";
+  if (status === "discovering") return "Buscando vídeos";
   if (status === "processing") return "Importando";
   if (status === "completed") return "Concluído";
   if (status === "cancelled") return "Cancelada";
-
   return "Falhou";
 }
 
-function StatusIcon({ status }: { status: ImportStatus }) {
-  if (status === "processing") {
-    return (
-      <Loader2 className="h-3.5 w-3.5 animate-spin text-teal-400" />
-    );
+function StatusIcon({ status }: { status: StatusRun }) {
+  if (status === "discovering" || status === "processing") {
+    return <Loader2 className="h-3.5 w-3.5 animate-spin text-teal-400" />;
   }
-
-  if (status === "completed") {
-    return (
-      <CircleCheck className="h-3.5 w-3.5 text-teal-400" />
-    );
-  }
-
-  if (status === "failed") {
-    return (
-      <CircleX className="h-3.5 w-3.5 text-[#F0997B]" />
-    );
-  }
-
-  if (status === "cancelled") {
-    return (
-      <CircleX className="h-3.5 w-3.5 text-neutral-500" />
-    );
-  }
-
-  return (
-    <Clock3 className="h-3.5 w-3.5 text-neutral-500" />
-  );
+  if (status === "completed") return <CircleCheck className="h-3.5 w-3.5 text-teal-400" />;
+  if (status === "failed") return <CircleX className="h-3.5 w-3.5 text-[#F0997B]" />;
+  if (status === "cancelled") return <CircleX className="h-3.5 w-3.5 text-neutral-500" />;
+  return <Clock3 className="h-3.5 w-3.5 text-neutral-500" />;
 }
 
-export default function ImportActivity({
-  userId,
-  onImportCompleted,
-}: ImportActivityProps) {
-  const [tarefas, setTarefas] = useState<ImportQueueRow[]>([]);
+export default function ImportActivity({ userId, onImportCompleted }: ImportActivityProps) {
+  const [execucoes, setExecucoes] = useState<ImportRunRow[]>([]);
   const [aberto, setAberto] = useState(false);
   const [detalheErro, setDetalheErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
-  const [acaoEmAndamento, setAcaoEmAndamento] = useState<string | null>(
-    null,
-  );
+  const [acaoEmAndamento, setAcaoEmAndamento] = useState<string | null>(null);
 
   const primeiraLeitura = useRef(true);
-  const statusAnterior = useRef<Record<string, ImportStatus>>({});
+  const statusAnterior = useRef<Record<string, StatusRun>>({});
 
   const carregar = useCallback(async () => {
     const supabase = supabaseBrowser();
-
     const { data, error } = await supabase
-      .from("meme_import_queue")
-      .select(
-        "id, source_url, source_type, categoria, status, total_items, processed_items, error_message, created_at, updated_at",
-      )
+      .from("import_runs")
+      .select("id, source_id, status, total_found, total_new, total_downloaded, total_skipped, total_failed, error_message, created_at, updated_at, import_sources(username, platform)")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(20);
@@ -134,28 +82,22 @@ export default function ImportActivity({
       return;
     }
 
-    const novas = (data ?? []) as ImportQueueRow[];
+    const novas = ((data ?? []) as unknown) as ImportRunRow[];
 
     if (!primeiraLeitura.current) {
       const acabouAgora = novas.some(
-        (tarefa) =>
-          tarefa.status === "completed" &&
-          statusAnterior.current[tarefa.id] &&
-          statusAnterior.current[tarefa.id] !== "completed",
+        (execucao) =>
+          execucao.status === "completed" &&
+          statusAnterior.current[execucao.id] &&
+          statusAnterior.current[execucao.id] !== "completed",
       );
-
-      if (acabouAgora) {
-        await onImportCompleted?.();
-      }
+      if (acabouAgora) await onImportCompleted?.();
     }
 
-    statusAnterior.current = Object.fromEntries(
-      novas.map((tarefa) => [tarefa.id, tarefa.status]),
-    );
-
+    statusAnterior.current = Object.fromEntries(novas.map((execucao) => [execucao.id, execucao.status]));
     primeiraLeitura.current = false;
 
-    setTarefas(novas);
+    setExecucoes(novas);
     setCarregando(false);
   }, [onImportCompleted, userId]);
 
@@ -165,64 +107,41 @@ export default function ImportActivity({
 
     async function atualizar() {
       if (cancelado) return;
-
       await carregar();
-
       if (cancelado) return;
 
       const supabase = supabaseBrowser();
-
       const { data } = await supabase
-        .from("meme_import_queue")
+        .from("import_runs")
         .select("id")
         .eq("user_id", userId)
-        .in("status", ["pending", "processing"])
+        .in("status", ["pending", "discovering", "processing"])
         .limit(1);
 
       if (!cancelado && data && data.length > 0) {
-        timeout = setTimeout(
-          atualizar,
-          INTERVALO_ATUALIZACAO,
-        );
+        timeout = setTimeout(atualizar, INTERVALO_ATUALIZACAO);
       }
     }
 
     atualizar();
-
     return () => {
       cancelado = true;
-
-      if (timeout) {
-        clearTimeout(timeout);
-      }
+      if (timeout) clearTimeout(timeout);
     };
   }, [carregar, userId]);
 
-  async function cancelarImportacao(tarefa: ImportQueueRow) {
-    if (
-      tarefa.status !== "pending" &&
-      tarefa.status !== "processing"
-    ) {
-      return;
-    }
-
-    setAcaoEmAndamento(`cancelar-${tarefa.id}`);
-
+  async function cancelarExecucao(execucao: ImportRunRow) {
+    if (execucao.status !== "pending" && execucao.status !== "discovering" && execucao.status !== "processing") return;
+    setAcaoEmAndamento(`cancelar-${execucao.id}`);
     try {
       const supabase = supabaseBrowser();
-
       const { error } = await supabase
-        .from("meme_import_queue")
-        .update({
-          status: "cancelled",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", tarefa.id)
+        .from("import_runs")
+        .update({ status: "cancelled", updated_at: new Date().toISOString() })
+        .eq("id", execucao.id)
         .eq("user_id", userId)
-        .in("status", ["pending", "processing"]);
-
+        .in("status", ["pending", "discovering", "processing"]);
       if (error) throw error;
-
       await carregar();
     } catch (error) {
       console.error("Erro ao cancelar importação:", error);
@@ -231,72 +150,16 @@ export default function ImportActivity({
     }
   }
 
-  async function cancelarTodas() {
-    const ids = tarefas
-      .filter(
-        (tarefa) =>
-          tarefa.status === "pending" ||
-          tarefa.status === "processing",
-      )
-      .map((tarefa) => tarefa.id);
-
-    if (ids.length === 0) return;
-
-    setAcaoEmAndamento("cancelar-todas");
-
+  async function limparExecucao(execucao: ImportRunRow) {
+    if (execucao.status === "pending" || execucao.status === "discovering" || execucao.status === "processing") return;
+    setAcaoEmAndamento(`limpar-${execucao.id}`);
     try {
       const supabase = supabaseBrowser();
-
-      const { error } = await supabase
-        .from("meme_import_queue")
-        .update({
-          status: "cancelled",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("user_id", userId)
-        .in("id", ids)
-        .in("status", ["pending", "processing"]);
-
+      const { error } = await supabase.from("import_runs").delete().eq("id", execucao.id).eq("user_id", userId);
       if (error) throw error;
-
-      await carregar();
-    } catch (error) {
-      console.error("Erro ao cancelar importações:", error);
-    } finally {
-      setAcaoEmAndamento(null);
-    }
-  }
-
-  async function limparImportacao(tarefa: ImportQueueRow) {
-    if (
-      tarefa.status === "pending" ||
-      tarefa.status === "processing"
-    ) {
-      return;
-    }
-
-    setAcaoEmAndamento(`limpar-${tarefa.id}`);
-
-    try {
-      const supabase = supabaseBrowser();
-
-      const { error } = await supabase
-        .from("meme_import_queue")
-        .delete()
-        .eq("id", tarefa.id)
-        .eq("user_id", userId);
-
-      if (error) throw error;
-
-      setTarefas((atuais) =>
-        atuais.filter((item) => item.id !== tarefa.id),
-      );
-
-      delete statusAnterior.current[tarefa.id];
-
-      if (detalheErro === tarefa.id) {
-        setDetalheErro(null);
-      }
+      setExecucoes((atuais) => atuais.filter((item) => item.id !== execucao.id));
+      delete statusAnterior.current[execucao.id];
+      if (detalheErro === execucao.id) setDetalheErro(null);
     } catch (error) {
       console.error("Erro ao limpar importação:", error);
     } finally {
@@ -305,35 +168,15 @@ export default function ImportActivity({
   }
 
   async function limparConcluidas() {
-    const ids = tarefas
-      .filter((tarefa) => tarefa.status === "completed")
-      .map((tarefa) => tarefa.id);
-
+    const ids = execucoes.filter((e) => e.status === "completed").map((e) => e.id);
     if (ids.length === 0) return;
-
     setAcaoEmAndamento("limpar-concluidas");
-
     try {
       const supabase = supabaseBrowser();
-
-      const { error } = await supabase
-        .from("meme_import_queue")
-        .delete()
-        .eq("user_id", userId)
-        .in("id", ids)
-        .eq("status", "completed");
-
+      const { error } = await supabase.from("import_runs").delete().eq("user_id", userId).in("id", ids).eq("status", "completed");
       if (error) throw error;
-
-      setTarefas((atuais) =>
-        atuais.filter(
-          (tarefa) => tarefa.status !== "completed",
-        ),
-      );
-
-      for (const id of ids) {
-        delete statusAnterior.current[id];
-      }
+      setExecucoes((atuais) => atuais.filter((e) => e.status !== "completed"));
+      for (const id of ids) delete statusAnterior.current[id];
     } catch (error) {
       console.error("Erro ao limpar importações concluídas:", error);
     } finally {
@@ -341,210 +184,70 @@ export default function ImportActivity({
     }
   }
 
-  if (carregando || tarefas.length === 0) {
-    return null;
-  }
+  if (carregando || execucoes.length === 0) return null;
 
-  const ativas = tarefas.filter(
-    (tarefa) =>
-      tarefa.status === "pending" ||
-      tarefa.status === "processing",
-  ).length;
-
-  const concluidas = tarefas.filter(
-    (tarefa) => tarefa.status === "completed",
-  ).length;
-
-  const falhas = tarefas.filter(
-    (tarefa) => tarefa.status === "failed",
-  ).length;
+  const ativas = execucoes.filter((e) => e.status === "pending" || e.status === "discovering" || e.status === "processing").length;
+  const concluidas = execucoes.filter((e) => e.status === "completed").length;
+  const falhas = execucoes.filter((e) => e.status === "failed").length;
 
   return (
     <div className="mb-4 overflow-hidden rounded-md border border-neutral-800/80 bg-neutral-950/40">
       <div className="flex min-h-[40px] items-center justify-between gap-3 px-3">
-        <button
-          type="button"
-          onClick={() => setAberto((valor) => !valor)}
-          className="flex min-w-0 flex-1 items-center gap-2 text-left"
-        >
-          <span className="text-xs font-medium text-neutral-300">
-            Importações
-          </span>
-
-          {ativas > 0 && (
-            <span className="rounded-full bg-teal-500/10 px-2 py-0.5 text-[10px] text-teal-300">
-              {ativas} {ativas === 1 ? "ativa" : "ativas"}
-            </span>
-          )}
-
-          {ativas === 0 && falhas > 0 && (
-            <span className="rounded-full bg-[#F0997B]/10 px-2 py-0.5 text-[10px] text-[#F0997B]">
-              {falhas} {falhas === 1 ? "falha" : "falhas"}
-            </span>
-          )}
+        <button type="button" onClick={() => setAberto((v) => !v)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+          <span className="text-xs font-medium text-neutral-300">Importações</span>
+          {ativas > 0 && <span className="rounded-full bg-teal-500/10 px-2 py-0.5 text-[10px] text-teal-300">{ativas} {ativas === 1 ? "ativa" : "ativas"}</span>}
+          {ativas === 0 && falhas > 0 && <span className="rounded-full bg-[#F0997B]/10 px-2 py-0.5 text-[10px] text-[#F0997B]">{falhas} {falhas === 1 ? "falha" : "falhas"}</span>}
         </button>
-
         <div className="flex shrink-0 items-center gap-2">
-          {aberto && ativas > 0 && (
-            <button
-              type="button"
-              onClick={cancelarTodas}
-              disabled={acaoEmAndamento !== null}
-              className="text-[10px] text-neutral-500 transition hover:text-[#F0997B] disabled:opacity-40"
-            >
-              {acaoEmAndamento === "cancelar-todas"
-                ? "Cancelando..."
-                : "Cancelar todas"}
-            </button>
-          )}
-
           {aberto && concluidas > 0 && (
-            <button
-              type="button"
-              onClick={limparConcluidas}
-              disabled={acaoEmAndamento !== null}
-              className="text-[10px] text-neutral-500 transition hover:text-neutral-300 disabled:opacity-40"
-            >
-              {acaoEmAndamento === "limpar-concluidas"
-                ? "Limpando..."
-                : "Limpar concluídas"}
+            <button type="button" onClick={limparConcluidas} disabled={acaoEmAndamento !== null} className="text-[10px] text-neutral-500 transition hover:text-neutral-300 disabled:opacity-40">
+              {acaoEmAndamento === "limpar-concluidas" ? "Limpando..." : "Limpar concluídas"}
             </button>
           )}
-
-          <button
-            type="button"
-            onClick={() => setAberto((valor) => !valor)}
-            className="flex h-7 w-7 items-center justify-center rounded hover:bg-neutral-900"
-            aria-label={
-              aberto
-                ? "Fechar importações"
-                : "Abrir importações"
-            }
-          >
-            {aberto ? (
-              <ChevronUp className="h-3.5 w-3.5 text-neutral-600" />
-            ) : (
-              <ChevronDown className="h-3.5 w-3.5 text-neutral-600" />
-            )}
+          <button type="button" onClick={() => setAberto((v) => !v)} className="flex h-7 w-7 items-center justify-center rounded hover:bg-neutral-900" aria-label={aberto ? "Fechar importações" : "Abrir importações"}>
+            {aberto ? <ChevronUp className="h-3.5 w-3.5 text-neutral-600" /> : <ChevronDown className="h-3.5 w-3.5 text-neutral-600" />}
           </button>
         </div>
       </div>
 
       {aberto && (
         <div className="divide-y divide-neutral-900 border-t border-neutral-900">
-          {tarefas.map((tarefa) => {
-            const processados =
-              tarefa.processed_items ?? 0;
-
-            const total =
-              tarefa.total_items ?? 0;
-
-            const percentual =
-              total > 0
-                ? Math.min(
-                    100,
-                    Math.round(
-                      (processados / total) * 100,
-                    ),
-                  )
-                : 0;
-
-            const ativa =
-              tarefa.status === "pending" ||
-              tarefa.status === "processing";
-
-            const mostrarProgresso =
-              total > 0 &&
-              (
-                tarefa.status === "processing" ||
-                tarefa.status === "completed" ||
-                tarefa.status === "cancelled"
-              );
-
-            const cancelando =
-              acaoEmAndamento ===
-              `cancelar-${tarefa.id}`;
-
-            const limpando =
-              acaoEmAndamento ===
-              `limpar-${tarefa.id}`;
+          {execucoes.map((execucao) => {
+            const baixados = execucao.total_downloaded ?? 0;
+            const ignorados = execucao.total_skipped ?? 0;
+            const falhados = execucao.total_failed ?? 0;
+            const novos = execucao.total_new ?? 0;
+            const processados = baixados + ignorados + falhados;
+            const percentual = novos > 0 ? Math.min(100, Math.round((processados / novos) * 100)) : 0;
+            const ativa = execucao.status === "pending" || execucao.status === "discovering" || execucao.status === "processing";
+            const mostrarProgresso = novos > 0 && (execucao.status === "processing" || execucao.status === "completed" || execucao.status === "cancelled");
+            const cancelando = acaoEmAndamento === `cancelar-${execucao.id}`;
+            const limpando = acaoEmAndamento === `limpar-${execucao.id}`;
 
             return (
-              <div
-                key={tarefa.id}
-                className="px-3 py-2.5"
-              >
+              <div key={execucao.id} className="px-3 py-2.5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate text-xs font-medium text-neutral-300">
-                      {nomeDaFonte(tarefa.source_url)}
-                    </p>
-
-                    <p className="mt-0.5 text-[10px] text-neutral-600">
-                      {plataformaDaFonte(
-                        tarefa.source_url,
-                      )}
-                    </p>
+                    <p className="truncate text-xs font-medium text-neutral-300">@{execucao.import_sources?.username ?? "?"}</p>
+                    <p className="mt-0.5 text-[10px] text-neutral-600">{ROTULO_PLATAFORMA[execucao.import_sources?.platform ?? ""] ?? "Importação"}</p>
                   </div>
-
                   <div className="flex shrink-0 items-start gap-3">
                     <div className="text-right">
                       <div className="flex items-center justify-end gap-1.5 text-[11px] text-neutral-400">
-                        <StatusIcon
-                          status={tarefa.status}
-                        />
-
-                        <span>
-                          {rotuloStatus(
-                            tarefa.status,
-                          )}
-                        </span>
+                        <StatusIcon status={execucao.status} />
+                        <span>{rotuloStatus(execucao.status)}</span>
                       </div>
-
                       {mostrarProgresso && (
-                        <p className="mt-0.5 text-[10px] tabular-nums text-neutral-600">
-                          {processados} de {total}
-                        </p>
+                        <p className="mt-0.5 text-[10px] tabular-nums text-neutral-600">{baixados} novo(s) · {ignorados} já existia(m) · {falhados} falhou/falharam</p>
                       )}
                     </div>
-
                     {ativa ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          cancelarImportacao(
-                            tarefa,
-                          )
-                        }
-                        disabled={
-                          acaoEmAndamento !== null
-                        }
-                        className="mt-0.5 text-[10px] text-neutral-600 transition hover:text-[#F0997B] disabled:opacity-40"
-                      >
-                        {cancelando
-                          ? "Cancelando..."
-                          : "Cancelar"}
+                      <button type="button" onClick={() => cancelarExecucao(execucao)} disabled={acaoEmAndamento !== null} className="mt-0.5 text-[10px] text-neutral-600 transition hover:text-[#F0997B] disabled:opacity-40">
+                        {cancelando ? "Cancelando..." : "Cancelar"}
                       </button>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          limparImportacao(
-                            tarefa,
-                          )
-                        }
-                        disabled={
-                          acaoEmAndamento !== null
-                        }
-                        className="flex h-5 w-5 items-center justify-center rounded text-neutral-700 transition hover:bg-neutral-900 hover:text-neutral-400 disabled:opacity-40"
-                        aria-label="Limpar do histórico"
-                        title="Limpar do histórico"
-                      >
-                        {limpando ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <X className="h-3 w-3" />
-                        )}
+                      <button type="button" onClick={() => limparExecucao(execucao)} disabled={acaoEmAndamento !== null} className="flex h-5 w-5 items-center justify-center rounded text-neutral-700 transition hover:bg-neutral-900 hover:text-neutral-400 disabled:opacity-40" aria-label="Limpar do histórico" title="Limpar do histórico">
+                        {limpando ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
                       </button>
                     )}
                   </div>
@@ -552,55 +255,23 @@ export default function ImportActivity({
 
                 {mostrarProgresso && (
                   <div className="mt-2 h-1 overflow-hidden rounded-full bg-neutral-900">
-                    <div
-                      className="h-full rounded-full bg-teal-500/70 transition-all"
-                      style={{
-                        width: `${percentual}%`,
-                      }}
-                    />
+                    <div className="h-full rounded-full bg-teal-500/70 transition-all" style={{ width: `${percentual}%` }} />
                   </div>
                 )}
 
-                {tarefa.status === "failed" &&
-                  tarefa.error_message && (
-                    <div className="mt-1.5">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setDetalheErro(
-                            (id) =>
-                              id === tarefa.id
-                                ? null
-                                : tarefa.id,
-                          )
-                        }
-                        className="text-[10px] text-neutral-500 hover:text-neutral-300"
-                      >
-                        {detalheErro ===
-                        tarefa.id
-                          ? "Ocultar detalhes"
-                          : "Ver detalhes"}
-                      </button>
-
-                      {detalheErro ===
-                        tarefa.id && (
-                        <p className="mt-1 max-h-24 overflow-auto rounded bg-neutral-900/70 p-2 text-[10px] leading-relaxed text-neutral-500">
-                          {
-                            tarefa.error_message
-                          }
-                        </p>
-                      )}
-                    </div>
-                  )}
+                {execucao.status === "failed" && execucao.error_message && (
+                  <div className="mt-1.5">
+                    <button type="button" onClick={() => setDetalheErro((id) => (id === execucao.id ? null : execucao.id))} className="text-[10px] text-neutral-500 hover:text-neutral-300">
+                      {detalheErro === execucao.id ? "Ocultar detalhes" : "Ver detalhes"}
+                    </button>
+                    {detalheErro === execucao.id && (
+                      <p className="mt-1 max-h-24 overflow-auto rounded bg-neutral-900/70 p-2 text-[10px] leading-relaxed text-neutral-500">{execucao.error_message}</p>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
-
-          {tarefas.length === 0 && (
-            <div className="px-3 py-5 text-center text-[11px] text-neutral-600">
-              Nenhuma importação no histórico.
-            </div>
-          )}
         </div>
       )}
     </div>

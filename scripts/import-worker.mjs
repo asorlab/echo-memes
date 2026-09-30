@@ -6,73 +6,62 @@ import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
 
+// ECHO // ASSETS — worker de sincronizacao de contas (Fontes -> Execucoes ->
+// Itens). Desacoplado de onde roda: local (modo continuo, igual sempre foi)
+// ou --once (processa tudo que estiver pending agora e sai — formato pronto
+// pra rodar via GitHub Actions/Fly.io no dia que a hospedagem for escolhida).
+
 // --------------------------------------------------
 // ENV
 // --------------------------------------------------
 
 function carregarEnvLocal() {
   const arquivo = path.resolve(".env.local");
-
-  if (!existsSync(arquivo)) {
-    throw new Error(".env.local não encontrado.");
-  }
-
+  if (!existsSync(arquivo)) throw new Error(".env.local não encontrado.");
   const conteudo = fs.readFileSync(arquivo, "utf8");
-
   for (const linha of conteudo.split(/\r?\n/)) {
     const limpa = linha.trim();
-
     if (!limpa || limpa.startsWith("#")) continue;
-
     const indice = limpa.indexOf("=");
-
     if (indice === -1) continue;
-
     const chave = limpa.slice(0, indice).trim();
     let valor = limpa.slice(indice + 1).trim();
-
-    if (
-      (valor.startsWith('"') && valor.endsWith('"')) ||
-      (valor.startsWith("'") && valor.endsWith("'"))
-    ) {
+    if ((valor.startsWith('"') && valor.endsWith('"')) || (valor.startsWith("'") && valor.endsWith("'"))) {
       valor = valor.slice(1, -1);
     }
-
     process.env[chave] = valor;
   }
 }
-
 carregarEnvLocal();
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
+if (!SUPABASE_URL) throw new Error("NEXT_PUBLIC_SUPABASE_URL não está definido.");
+if (!SUPABASE_SECRET_KEY) throw new Error("SUPABASE_SECRET_KEY não está definido.");
 
-if (!SUPABASE_URL) {
-  throw new Error("NEXT_PUBLIC_SUPABASE_URL não está definido.");
-}
-
-if (!SUPABASE_SECRET_KEY) {
-  throw new Error("SUPABASE_SECRET_KEY não está definido.");
-}
-
-if (!SUPABASE_SECRET_KEY.startsWith("sb_secret_")) {
-  throw new Error(
-    "SUPABASE_SECRET_KEY não parece ser uma Secret key válida (sb_secret_...).",
-  );
-}
-
-const supabase = createClient(
-  SUPABASE_URL,
-  SUPABASE_SECRET_KEY,
-  {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-  },
-);
+const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
 
 const BUCKET = "life-os";
+const MODO_UNICO = process.argv.includes("--once");
+const TIMEOUT_PROCESSING_MS = 15 * 60 * 1000; // 15min sem update = worker morto
+
+// --------------------------------------------------
+// CLASSIFICAÇÃO DE ERRO — traduz a mensagem tecnica do yt-dlp numa
+// categoria estavel, sem fingir mais precisao do que o proprio yt-dlp da.
+// --------------------------------------------------
+
+function classificarErro(mensagem) {
+  const m = (mensagem || "").toLowerCase();
+  if (m.includes("private") && m.includes("embedding")) return "privado_ou_embed_desabilitado";
+  if (m.includes("login required") || m.includes("cookies") || m.includes("sign in")) return "autenticacao_necessaria";
+  if (m.includes("429") || m.includes("too many requests") || m.includes("rate limit")) return "bloqueio_anti_bot";
+  if (m.includes("403") || m.includes("forbidden") || m.includes("captcha")) return "bloqueio_anti_bot";
+  if (m.includes("404") || m.includes("not found") || m.includes("account does not exist")) return "nao_encontrado";
+  if (m.includes("unsupported url") || m.includes("no video formats") || m.includes("unable to extract")) return "erro_extrator";
+  return "desconhecido";
+}
 
 // --------------------------------------------------
 // YT-DLP
@@ -80,736 +69,312 @@ const BUCKET = "life-os";
 
 function executarYtDlp(argumentos) {
   return new Promise((resolve, reject) => {
-    const processo = spawn("yt-dlp", argumentos, {
-      shell: false,
-      windowsHide: true,
-    });
-
+    const processo = spawn("yt-dlp", argumentos, { shell: false, windowsHide: true });
     let stdout = "";
     let stderr = "";
-
-    processo.stdout.on("data", (dados) => {
-      stdout += dados.toString();
-    });
-
-    processo.stderr.on("data", (dados) => {
-      stderr += dados.toString();
-    });
-
-    processo.on("error", (erro) => {
-      reject(erro);
-    });
-
+    processo.stdout.on("data", (d) => { stdout += d.toString(); });
+    processo.stderr.on("data", (d) => { stderr += d.toString(); });
+    processo.on("error", reject);
     processo.on("close", (codigo) => {
       if (codigo !== 0) {
-        reject(
-          new Error(
-            `yt-dlp terminou com código ${codigo}\n${stderr || stdout}`,
-          ),
-        );
+        reject(new Error(`yt-dlp terminou com código ${codigo}\n${stderr || stdout}`));
         return;
       }
-
       resolve(stdout);
     });
   });
 }
 
-// --------------------------------------------------
-// TIKTOK / PERFIL
-// --------------------------------------------------
-
-async function listarVideosPerfil(url) {
+async function listarVideosPerfilTiktok(url) {
   console.log(`🔎 Lendo perfil completo: ${url}`);
-
-  const saida = await executarYtDlp([
-    "--flat-playlist",
-    "--print",
-    "%(webpage_url)s",
-    url,
-  ]);
-
-  const urls = saida
-    .split(/\r?\n/)
-    .map((linha) => linha.trim())
-    .filter((linha) => linha.startsWith("http"));
-
-  return [...new Set(urls)];
+  const saida = await executarYtDlp(["--flat-playlist", "--print", "%(id)s|||%(webpage_url)s|||%(uploader)s", url]);
+  const linhas = saida.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const vistos = new Set();
+  const itens = [];
+  for (const linha of linhas) {
+    const [id, webpageUrl, uploader] = linha.split("|||");
+    if (!id || vistos.has(id)) continue;
+    vistos.add(id);
+    itens.push({ externalId: id, url: webpageUrl || url, autor: uploader || null });
+  }
+  return itens;
 }
 
 async function obterInfoVideo(url) {
-  console.log("   🔎 Analisando vídeo...");
-
-  const saida = await executarYtDlp([
-    "--dump-single-json",
-    "--no-playlist",
-    url,
-  ]);
-
+  const saida = await executarYtDlp(["--dump-single-json", "--no-playlist", url]);
   return JSON.parse(saida);
 }
 
-// --------------------------------------------------
-// DOWNLOAD
-// --------------------------------------------------
-
 async function baixarVideo(url, externalId) {
-  const base = path.join(
-    os.tmpdir(),
-    `echo-${externalId}-${Date.now()}`,
-  );
-
+  const base = path.join(os.tmpdir(), `echo-${externalId}-${Date.now()}`);
   const arquivoFinal = `${base}.mp4`;
-
-  console.log("   ↓ Baixando vídeo...");
-
-  await executarYtDlp([
-    "--no-playlist",
-    "-f",
-    "best",
-    "--recode-video",
-    "mp4",
-    "-o",
-    arquivoFinal,
-    url,
-  ]);
-
-  if (!existsSync(arquivoFinal)) {
-    throw new Error(
-      `O yt-dlp terminou, mas o arquivo final não foi encontrado: ${arquivoFinal}`,
-    );
-  }
-
-  console.log("   ✓ Download concluído");
-
+  await executarYtDlp(["--no-playlist", "-f", "best", "--recode-video", "mp4", "-o", arquivoFinal, url]);
+  if (!existsSync(arquivoFinal)) throw new Error(`O yt-dlp terminou, mas o arquivo final não foi encontrado: ${arquivoFinal}`);
   return arquivoFinal;
 }
 
 // --------------------------------------------------
-// SUPABASE / MEMES
+// STORAGE / MEMES
 // --------------------------------------------------
 
-async function memeJaExiste(
-  userId,
-  plataforma,
-  externalId,
-) {
-  const { data, error } = await supabase
-    .from("memes")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("plataforma", plataforma)
-    .eq("external_id", externalId)
-    .limit(1);
-
+async function memeExistente(userId, plataforma, externalId) {
+  const { data, error } = await supabase.from("memes").select("id").eq("user_id", userId).eq("plataforma", plataforma).eq("external_id", externalId).limit(1).maybeSingle();
   if (error) throw error;
-
-  return Boolean(data?.length);
+  return data?.id ?? null;
 }
 
-async function enviarParaStorage(
-  userId,
-  plataforma,
-  externalId,
-  arquivo,
-) {
+async function enviarParaStorage(userId, plataforma, externalId, arquivo) {
   const bytes = await readFile(arquivo);
-
-  const extensao =
-    path.extname(arquivo).replace(".", "") || "mp4";
-
-  const caminho =
-    `${userId}/memes/${plataforma}/${externalId}.${extensao}`;
-
-  const contentType =
-    extensao === "webm"
-      ? "video/webm"
-      : "video/mp4";
-
-  const { error } = await supabase.storage
-    .from(BUCKET)
-    .upload(caminho, bytes, {
-      contentType,
-      upsert: false,
-    });
-
+  const extensao = path.extname(arquivo).replace(".", "") || "mp4";
+  const caminho = `${userId}/memes/${plataforma}/${externalId}.${extensao}`;
+  const contentType = extensao === "webm" ? "video/webm" : "video/mp4";
+  const { error } = await supabase.storage.from(BUCKET).upload(caminho, bytes, { contentType, upsert: false });
   if (error) {
-    const mensagem =
-      String(error.message || "").toLowerCase();
-
-    if (
-      !mensagem.includes("already exists") &&
-      !mensagem.includes("duplicate")
-    ) {
-      throw error;
-    }
+    const msg = String(error.message || "").toLowerCase();
+    if (!msg.includes("already exists") && !msg.includes("duplicate")) throw error;
   }
-
-  const { data } = supabase.storage
-    .from(BUCKET)
-    .getPublicUrl(caminho);
-
-  if (!data?.publicUrl) {
-    throw new Error(
-      `Não foi possível gerar a URL pública de ${caminho}.`,
-    );
-  }
-
-  return data.publicUrl;
+  return caminho; // caminho puro — bucket privado, sem getPublicUrl
 }
 
 function dataPublicacao(info) {
-  if (info.timestamp) {
-    return new Date(
-      info.timestamp * 1000,
-    ).toISOString();
+  if (info.timestamp) return new Date(info.timestamp * 1000).toISOString();
+  if (info.upload_date && /^\d{8}$/.test(info.upload_date)) {
+    const ano = info.upload_date.slice(0, 4), mes = info.upload_date.slice(4, 6), dia = info.upload_date.slice(6, 8);
+    return new Date(`${ano}-${mes}-${dia}T00:00:00Z`).toISOString();
   }
-
-  if (
-    info.upload_date &&
-    /^\d{8}$/.test(info.upload_date)
-  ) {
-    const ano = info.upload_date.slice(0, 4);
-    const mes = info.upload_date.slice(4, 6);
-    const dia = info.upload_date.slice(6, 8);
-
-    return new Date(
-      `${ano}-${mes}-${dia}T00:00:00Z`,
-    ).toISOString();
-  }
-
   return null;
 }
 
-async function criarMeme({
-  tarefa,
-  info,
-  urlOriginal,
-  publicUrl,
-  externalId,
-}) {
-  const criador =
-    info.uploader_id ||
-    info.uploader ||
-    info.channel ||
-    null;
+async function criarMeme({ userId, plataforma, info, urlOriginal, caminho, externalId }) {
+  const criador = info.uploader_id || info.uploader || info.channel || null;
+  const titulo = info.title || info.description?.slice(0, 120) || "Vídeo importado";
+  const tags = criador ? [String(criador).replace(/^@/, "").toLowerCase()] : [];
+  const { data, error } = await supabase.from("memes").insert({
+    user_id: userId, titulo: String(titulo).slice(0, 200), imagem_url: caminho, link_origem: urlOriginal,
+    explicacao: "", tags, plataforma, criador, categoria: "geral", publicado_em: dataPublicacao(info), external_id: externalId,
+  }).select("id").single();
+  if (error) throw error;
+  return data.id;
+}
 
-  const titulo =
-    info.title ||
-    info.description?.slice(0, 120) ||
-    "Vídeo importado";
+// --------------------------------------------------
+// EXECUÇÕES (import_runs) / ITENS (import_items)
+// --------------------------------------------------
 
-  const tags = [];
-
-  if (criador) {
-    tags.push(
-      String(criador)
-        .replace(/^@/, "")
-        .toLowerCase(),
-    );
+async function recuperarExecucoesTravadas() {
+  const limite = new Date(Date.now() - TIMEOUT_PROCESSING_MS).toISOString();
+  const { data, error } = await supabase.from("import_runs").select("id").in("status", ["discovering", "processing"]).lt("updated_at", limite);
+  if (error) throw error;
+  for (const run of data ?? []) {
+    console.log(`⚠ Execução ${run.id} travada — marcando como falha.`);
+    await supabase.from("import_runs").update({
+      status: "failed", error_message: "Worker interrompido antes de terminar (timeout de segurança).",
+      finished_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    }).eq("id", run.id);
   }
-
-  const { error } = await supabase
-    .from("memes")
-    .insert({
-      user_id: tarefa.user_id,
-      titulo: String(titulo).slice(0, 200),
-      imagem_url: publicUrl,
-      link_origem: urlOriginal,
-      explicacao: "",
-      tags,
-      plataforma: "tiktok",
-      criador,
-      categoria: tarefa.categoria || "geral",
-      publicado_em: dataPublicacao(info),
-      external_id: externalId,
-    });
-
-  if (error) throw error;
 }
 
-// --------------------------------------------------
-// FILA
-// --------------------------------------------------
-
-async function atualizarTarefa(id, patch) {
-  const { error } = await supabase
-    .from("meme_import_queue")
-    .update({
-      ...patch,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id);
-
+async function proximaExecucaoPendente() {
+  const { data, error } = await supabase.from("import_runs").select("*").eq("status", "pending").order("created_at", { ascending: true }).limit(1).maybeSingle();
   if (error) throw error;
-}
-
-async function buscarProximaTarefa() {
-  const { data, error } = await supabase
-    .from("meme_import_queue")
-    .select("*")
-    .eq("status", "pending")
-    .order("created_at", {
-      ascending: true,
-    })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw error;
-
   return data;
 }
 
-async function obterStatusTarefa(id) {
-  const { data, error } = await supabase
-    .from("meme_import_queue")
-    .select("status")
-    .eq("id", id)
-    .maybeSingle();
-
+// UPDATE atomico condicionado a status='pending' — se 0 linhas mudarem,
+// outra execucao (outro worker) ja reivindicou esse job.
+async function reivindicarExecucao(runId) {
+  const { data, error } = await supabase.from("import_runs")
+    .update({ status: "discovering", started_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("id", runId).eq("status", "pending").select("*").maybeSingle();
   if (error) throw error;
-
-  return data?.status ?? null;
+  return data;
 }
 
-async function tarefaFoiCancelada(id) {
-  const status = await obterStatusTarefa(id);
+async function atualizarExecucao(runId, patch) {
+  const { error } = await supabase.from("import_runs").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", runId);
+  if (error) throw error;
+}
 
-  return status === "cancelled";
+async function execucaoFoiCancelada(runId) {
+  const { data } = await supabase.from("import_runs").select("status").eq("id", runId).maybeSingle();
+  return data?.status === "cancelled";
 }
 
 // --------------------------------------------------
-// IMPORTAÇÃO DE UM VÍDEO
+// PROCESSAMENTO DE UMA EXECUÇÃO
 // --------------------------------------------------
 
-async function importarVideo(
-  tarefa,
-  url,
-  numero,
-  total,
-) {
-  console.log(`\n[${numero}/${total}] ${url}`);
+async function processarExecucao(run) {
+  console.log(`\n==== EXECUÇÃO ${run.id} (fonte ${run.source_id}) ====`);
 
-  const info = await obterInfoVideo(url);
+  const { data: fonte, error: erroFonte } = await supabase.from("import_sources").select("*").eq("id", run.source_id).single();
+  if (erroFonte) throw erroFonte;
 
-  const externalId =
-    String(info.id || "").trim();
-
-  if (!externalId) {
-    throw new Error(
-      `Vídeo sem ID: ${url}`,
-    );
-  }
-
-  const existe = await memeJaExiste(
-    tarefa.user_id,
-    "tiktok",
-    externalId,
-  );
-
-  if (existe) {
-    console.log(
-      `   ↷ ${externalId} já existe. Pulando.`,
-    );
-
-    return "existente";
-  }
-
-  console.log(`   ID: ${externalId}`);
-
-  console.log(
-    `   Criador: ${
-      info.uploader_id ||
-      info.uploader ||
-      "desconhecido"
-    }`,
-  );
-
-  let arquivo = null;
+  console.log(`Fonte: @${fonte.username} (${fonte.platform})`);
 
   try {
-    arquivo = await baixarVideo(
-      url,
-      externalId,
-    );
-
-    console.log(
-      "   ↑ Enviando ao Supabase...",
-    );
-
-    const publicUrl =
-      await enviarParaStorage(
-        tarefa.user_id,
-        "tiktok",
-        externalId,
-        arquivo,
-      );
-
-    console.log(
-      "   ✓ Arquivo enviado ao Storage",
-    );
-
-    console.log(
-      "   ＋ Criando card no ECHO...",
-    );
-
-    await criarMeme({
-      tarefa,
-      info,
-      urlOriginal: url,
-      publicUrl,
-      externalId,
-    });
-
-    console.log(
-      "   ✓ Card criado no ECHO",
-    );
-
-    return "importado";
-  } finally {
-    if (
-      arquivo &&
-      existsSync(arquivo)
-    ) {
-      await unlink(arquivo).catch(
-        () => {},
-      );
-    }
-  }
-}
-
-// --------------------------------------------------
-// PROCESSAMENTO DA TAREFA
-// --------------------------------------------------
-
-async function processarTarefa(tarefa) {
-  console.log(
-    "\n====================================",
-  );
-  console.log(
-    "ECHO // IMPORT WORKER",
-  );
-  console.log(
-    "====================================",
-  );
-
-  console.log(
-    `Tarefa: ${tarefa.id}`,
-  );
-
-  console.log(
-    `Fonte: ${tarefa.source_url}`,
-  );
-
-  console.log(
-    `Tipo: ${tarefa.source_type}`,
-  );
-
-  console.log(
-    `Categoria: ${
-      tarefa.categoria || "geral"
-    }`,
-  );
-
-  await atualizarTarefa(
-    tarefa.id,
-    {
-      status: "processing",
-      error_message: null,
-      processed_items: 0,
-    },
-  );
-
-  try {
-    let urls = [];
-
-    if (
-      tarefa.source_type === "profile"
-    ) {
-      urls =
-        await listarVideosPerfil(
-          tarefa.source_url,
-        );
+    // ---- descoberta ----
+    let descobertos = [];
+    if (fonte.platform === "tiktok") {
+      descobertos = await listarVideosPerfilTiktok(fonte.profile_url);
     } else {
-      urls = [
-        tarefa.source_url,
-      ];
+      throw new Error(`Plataforma "${fonte.platform}" ainda não tem sincronização de perfil implementada.`);
+    }
+    console.log(`✓ ${descobertos.length} vídeo(s) encontrados no perfil.`);
+
+    const { data: existentes, error: erroExistentes } = await supabase.from("import_items").select("external_id").eq("source_id", fonte.id);
+    if (erroExistentes) throw erroExistentes;
+    const idsExistentes = new Set((existentes ?? []).map((r) => r.external_id));
+    const novos = descobertos.filter((d) => !idsExistentes.has(d.externalId));
+
+    console.log(`✓ ${novos.length} novo(s) (${descobertos.length - novos.length} já conhecido(s)).`);
+
+    if (novos.length > 0) {
+      const linhas = novos.map((n) => ({
+        source_id: fonte.id, user_id: fonte.user_id, platform: fonte.platform, external_id: n.externalId,
+        original_url: n.url, author: n.autor, status: "pending", discovered_in_run_id: run.id,
+      }));
+      const { error: erroInsert } = await supabase.from("import_items").upsert(linhas, { onConflict: "user_id,platform,external_id", ignoreDuplicates: true });
+      if (erroInsert) throw erroInsert;
     }
 
-    if (urls.length === 0) {
-      throw new Error(
-        "Nenhum vídeo foi encontrado nessa fonte.",
-      );
-    }
+    await atualizarExecucao(run.id, { status: "processing", total_found: descobertos.length, total_new: novos.length });
 
-    console.log(
-      `\n✓ ${urls.length} vídeo(s) encontrado(s).`,
-    );
+    // ---- processamento (todos os pending da fonte, nao so os novos —
+    // assim retry de item falho entra no mesmo fluxo) ----
+    const { data: pendentes, error: erroPendentes } = await supabase.from("import_items").select("*").eq("source_id", fonte.id).eq("status", "pending").order("created_at", { ascending: true });
+    if (erroPendentes) throw erroPendentes;
 
-    await atualizarTarefa(
-      tarefa.id,
-      {
-        total_items: urls.length,
-      },
-    );
+    let baixados = 0, ignorados = 0, falhados = 0;
 
-    let processados = 0;
+    for (let i = 0; i < (pendentes ?? []).length; i++) {
+      const item = pendentes[i];
 
-    for (
-      let i = 0;
-      i < urls.length;
-      i++
-    ) {
-      // Antes de começar o próximo vídeo,
-      // verifica se a usuária cancelou pelo ECHO.
-      if (
-        await tarefaFoiCancelada(
-          tarefa.id,
-        )
-      ) {
-        console.log(
-          "\n⊘ IMPORTAÇÃO CANCELADA PELO ECHO",
-        );
-
-        console.log(
-          `${processados}/${urls.length} processados antes do cancelamento.`,
-        );
-
+      if (await execucaoFoiCancelada(run.id)) {
+        console.log("\n⊘ EXECUÇÃO CANCELADA PELO ECHO");
+        await atualizarExecucao(run.id, { finished_at: new Date().toISOString() });
         return;
       }
 
-      await importarVideo(
-        tarefa,
-        urls[i],
-        i + 1,
-        urls.length,
-      );
+      console.log(`\n[${i + 1}/${pendentes.length}] ${item.external_id}`);
 
-      processados++;
-
-      // Não sobrescreve "cancelled" caso o botão
-      // tenha sido clicado durante o processamento
-      // do vídeo atual.
-      if (
-        await tarefaFoiCancelada(
-          tarefa.id,
-        )
-      ) {
-        console.log(
-          "\n⊘ IMPORTAÇÃO CANCELADA PELO ECHO",
-        );
-
-        console.log(
-          `${processados}/${urls.length} processados antes do cancelamento.`,
-        );
-
-        return;
+      const memeIdExistente = await memeExistente(fonte.user_id, fonte.platform, item.external_id);
+      if (memeIdExistente) {
+        console.log("   ↷ já existe como meme. Ignorando.");
+        await supabase.from("import_items").update({ status: "skipped", meme_id: memeIdExistente, processed_in_run_id: run.id, updated_at: new Date().toISOString() }).eq("id", item.id);
+        ignorados++;
+        await atualizarExecucao(run.id, { total_skipped: ignorados, total_downloaded: baixados, total_failed: falhados });
+        continue;
       }
 
-      await atualizarTarefa(
-        tarefa.id,
-        {
-          processed_items:
-            processados,
-        },
-      );
+      let arquivo = null;
+      try {
+        const info = await obterInfoVideo(item.original_url);
+        arquivo = await baixarVideo(item.original_url, item.external_id);
+        const caminho = await enviarParaStorage(fonte.user_id, fonte.platform, item.external_id, arquivo);
+        const memeId = await criarMeme({ userId: fonte.user_id, plataforma: fonte.platform, info, urlOriginal: item.original_url, caminho, externalId: item.external_id });
+
+        await supabase.from("import_items").update({
+          status: "completed", meme_id: memeId, processed_in_run_id: run.id, attempts: item.attempts + 1,
+          author: info.uploader_id || info.uploader || item.author, caption: info.description?.slice(0, 500) ?? item.caption,
+          published_at: dataPublicacao(info), updated_at: new Date().toISOString(),
+        }).eq("id", item.id);
+
+        console.log("   ✓ Importado");
+        baixados++;
+      } catch (erro) {
+        const mensagem = erro instanceof Error ? erro.message : String(erro);
+        console.error(`   ✗ Falhou: ${mensagem.split("\n")[0]}`);
+        await supabase.from("import_items").update({
+          status: "failed", error_message: mensagem.slice(0, 5000), error_category: classificarErro(mensagem),
+          processed_in_run_id: run.id, attempts: item.attempts + 1, updated_at: new Date().toISOString(),
+        }).eq("id", item.id);
+        falhados++;
+      } finally {
+        if (arquivo && existsSync(arquivo)) await unlink(arquivo).catch(() => {});
+      }
+
+      await atualizarExecucao(run.id, { total_skipped: ignorados, total_downloaded: baixados, total_failed: falhados });
     }
 
-    // Última proteção antes de marcar como concluída.
-    if (
-      await tarefaFoiCancelada(
-        tarefa.id,
-      )
-    ) {
-      console.log(
-        "\n⊘ IMPORTAÇÃO CANCELADA PELO ECHO",
-      );
-
+    if (await execucaoFoiCancelada(run.id)) {
+      console.log("\n⊘ EXECUÇÃO CANCELADA PELO ECHO");
+      await atualizarExecucao(run.id, { finished_at: new Date().toISOString() });
       return;
     }
 
-    await atualizarTarefa(
-      tarefa.id,
-      {
-        status: "completed",
-        processed_items:
-          processados,
-        error_message: null,
-      },
-    );
+    await atualizarExecucao(run.id, { status: "completed", finished_at: new Date().toISOString() });
 
-    console.log(
-      "\n====================================",
-    );
+    const { count } = await supabase.from("import_items").select("id", { count: "exact", head: true }).eq("source_id", fonte.id).eq("status", "completed");
+    await supabase.from("import_sources").update({ last_synced_at: new Date().toISOString(), total_imported: count ?? 0, updated_at: new Date().toISOString() }).eq("id", fonte.id);
 
-    console.log(
-      "✓ IMPORTAÇÃO CONCLUÍDA",
-    );
-
-    console.log(
-      `${processados}/${urls.length} processados`,
-    );
-
-    console.log(
-      "====================================",
-    );
+    console.log(`\n==== CONCLUÍDO: ${baixados} novo(s), ${ignorados} já existia(m), ${falhados} falharam ====`);
   } catch (erro) {
-    const mensagem =
-      erro instanceof Error
-        ? erro.message
-        : String(erro);
-
-    // Se a usuária cancelou enquanto alguma
-    // operação estava terminando, preserva
-    // o status cancelled em vez de trocar para failed.
-    const cancelada =
-      await tarefaFoiCancelada(
-        tarefa.id,
-      ).catch(() => false);
-
-    if (cancelada) {
-      console.log(
-        "\n⊘ Importação cancelada.",
-      );
-
-      return;
-    }
-
-    await atualizarTarefa(
-      tarefa.id,
-      {
-        status: "failed",
-        error_message:
-          mensagem.slice(
-            0,
-            5000,
-          ),
-      },
-    ).catch(() => {});
-
+    const mensagem = erro instanceof Error ? erro.message : String(erro);
+    const cancelada = await execucaoFoiCancelada(run.id).catch(() => false);
+    if (cancelada) { console.log("\n⊘ Cancelada."); return; }
+    await atualizarExecucao(run.id, { status: "failed", error_message: mensagem.slice(0, 5000), finished_at: new Date().toISOString() });
     throw erro;
   }
 }
 
 // --------------------------------------------------
-// WORKER CONTÍNUO
+// LOOP PRINCIPAL
 // --------------------------------------------------
 
 const INTERVALO_FILA_MS = 5000;
-
-function esperar(ms) {
-  return new Promise((resolve) =>
-    setTimeout(resolve, ms),
-  );
-}
+function esperar(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 let encerrando = false;
+process.on("SIGINT", () => { console.log("\n\nECHO // Encerrando worker..."); encerrando = true; });
 
-process.on("SIGINT", () => {
-  console.log(
-    "\n\nECHO // Encerrando worker...",
-  );
-
-  encerrando = true;
-});
-
-async function main() {
-  console.log(
-    "\n====================================",
-  );
-  console.log(
-    "ECHO // WORKER ATIVO",
-  );
-  console.log(
-    "====================================",
-  );
-  console.log(
-    "Monitorando novas importações.",
-  );
-  console.log(
-    "Pressione Ctrl+C para encerrar.\n",
-  );
-
+async function processarTudoPendente() {
+  await recuperarExecucoesTravadas();
+  let processouAlgo = false;
   while (!encerrando) {
+    const proxima = await proximaExecucaoPendente();
+    if (!proxima) break;
+    const reivindicada = await reivindicarExecucao(proxima.id);
+    if (!reivindicada) continue; // outro worker pegou primeiro
+    processouAlgo = true;
     try {
-      const tarefa =
-        await buscarProximaTarefa();
-
-      if (!tarefa) {
-        process.stdout.write(
-          "\rECHO // Aguardando novas importações... ",
-        );
-
-        await esperar(
-          INTERVALO_FILA_MS,
-        );
-
-        continue;
-      }
-
-      process.stdout.write(
-        "\r" + " ".repeat(60) + "\r",
-      );
-
-      try {
-        await processarTarefa(
-          tarefa,
-        );
-      } catch (erro) {
-        console.error(
-          "\n✗ IMPORTAÇÃO FALHOU",
-        );
-
-        console.error(
-          erro instanceof Error
-            ? erro.message
-            : erro,
-        );
-
-        console.log(
-          "\nECHO // O worker continuará ativo.",
-        );
-      }
-
-      if (!encerrando) {
-        console.log(
-          "\nECHO // Procurando próxima tarefa...",
-        );
-      }
+      await processarExecucao(reivindicada);
     } catch (erro) {
-      console.error(
-        "\n✗ Erro ao consultar a fila:",
-      );
-
-      console.error(
-        erro instanceof Error
-          ? erro.message
-          : erro,
-      );
-
-      console.log(
-        `Tentando novamente em ${
-          INTERVALO_FILA_MS / 1000
-        } segundos...`,
-      );
-
-      await esperar(
-        INTERVALO_FILA_MS,
-      );
+      console.error("\n✗ EXECUÇÃO FALHOU:", erro instanceof Error ? erro.message : erro);
     }
   }
+  return processouAlgo;
+}
 
-  console.log(
-    "✓ Worker encerrado.",
-  );
+async function main() {
+  console.log("\n====================================");
+  console.log(`ECHO // WORKER DE CONTAS ${MODO_UNICO ? "(modo --once)" : "(modo contínuo)"}`);
+  console.log("====================================\n");
+
+  if (MODO_UNICO) {
+    await processarTudoPendente();
+    console.log("\n✓ Nada mais pendente — encerrando (--once).");
+    return;
+  }
+
+  console.log("Monitorando novas sincronizações. Pressione Ctrl+C para encerrar.\n");
+  while (!encerrando) {
+    try {
+      const processou = await processarTudoPendente();
+      if (!processou && !encerrando) {
+        process.stdout.write("\rECHO // Aguardando novas sincronizações... ");
+        await esperar(INTERVALO_FILA_MS);
+      }
+    } catch (erro) {
+      console.error("\n✗ Erro no loop principal:", erro instanceof Error ? erro.message : erro);
+      await esperar(INTERVALO_FILA_MS);
+    }
+  }
+  console.log("✓ Worker encerrado.");
 }
 
 main().catch((erro) => {
-  console.error(
-    "\n✗ WORKER FALHOU",
-  );
-
+  console.error("\n✗ WORKER FALHOU");
   console.error(erro);
-
   process.exitCode = 1;
 });

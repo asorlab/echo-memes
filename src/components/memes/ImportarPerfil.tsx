@@ -1,68 +1,54 @@
 "use client";
 
 import { useState } from "react";
-import { supabaseBrowser } from "@/lib/supabase/client";
+import { useUser } from "@/lib/useUser";
+import { adicionarFonteEExecutar } from "@/lib/contas";
 
-const CATEGORIA_PADRAO = "geral";
+function extrairUsername(url: string): string | null {
+  try {
+    const m = new URL(url).pathname.match(/^\/@([^/]+)/i);
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  }
+}
 
 export default function ImportarPerfil() {
+  const { user } = useUser();
   const [url, setUrl] = useState("");
   const [carregando, setCarregando] = useState(false);
   const [mensagem, setMensagem] = useState("");
 
   async function importarPerfil() {
-    const supabase = supabaseBrowser();
     const link = url.trim();
 
     if (!link) {
       setMensagem("Cole o link de um perfil.");
       return;
     }
-
     if (!link.includes("tiktok.com/@")) {
-      setMensagem(
-        "Use um link de perfil do TikTok, como https://www.tiktok.com/@perfil"
-      );
+      setMensagem("Use um link de perfil do TikTok, como https://www.tiktok.com/@perfil");
+      return;
+    }
+    const username = extrairUsername(link);
+    if (!username) {
+      setMensagem("Não consegui identificar o @usuário nesse link.");
+      return;
+    }
+    if (!user) {
+      setMensagem("Você precisa estar logada no ECHO.");
       return;
     }
 
     setCarregando(true);
     setMensagem("");
-
     try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) {
-        throw new Error("Você precisa estar logada no ECHO.");
-      }
-
-      const { error } = await supabase
-        .from("meme_import_queue")
-        .insert({
-          user_id: user.id,
-          source_url: link,
-          source_type: "profile",
-          categoria: CATEGORIA_PADRAO,
-          status: "pending",
-        });
-
-      if (error) {
-        throw error;
-      }
-
+      await adicionarFonteEExecutar(user.id, "tiktok", username, link);
       setUrl("");
-      setMensagem("Perfil adicionado. Aguardando importação.");
+      setMensagem("Perfil adicionado como Conta. Acompanhe em Contas → @" + username + ".");
     } catch (erro) {
       console.error(erro);
-
-      setMensagem(
-        erro instanceof Error
-          ? erro.message
-          : "Não foi possível adicionar o perfil."
-      );
+      setMensagem(erro instanceof Error ? erro.message : "Não foi possível adicionar o perfil.");
     } finally {
       setCarregando(false);
     }
@@ -90,6 +76,7 @@ export default function ImportarPerfil() {
       </button>
 
       {mensagem && <p className="text-[11px] text-neutral-500">{mensagem}</p>}
+      <p className="text-[10px] text-neutral-600">Isso vira uma Conta acompanhada — dá pra sincronizar de novo depois, só trazendo conteúdo novo.</p>
     </div>
   );
 }

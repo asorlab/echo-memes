@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  Radio, Sparkles, LogOut, X, ChevronDown, AudioLines, ImageIcon, LayoutTemplate, Compass, Lightbulb, Trash2,
+  Radio, Sparkles, LogOut, X, ChevronDown, AudioLines, ImageIcon, LayoutTemplate, Compass, Lightbulb, Trash2, Rss,
 } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
@@ -30,6 +30,7 @@ const GRUPOS: GrupoNav[] = [
     rotulo: "Edição",
     itens: [
       { id: "memes", nome: "Memes", icone: Sparkles, href: "/" },
+      { id: "contas", nome: "Contas", icone: Rss, href: "/contas" },
       { id: "audios", nome: "Áudios", icone: AudioLines, href: "/audios" },
       { id: "visuais", nome: "Visuais", icone: ImageIcon, href: "/visuais" },
       { id: "templates", nome: "Templates", icone: LayoutTemplate, href: "/templates" },
