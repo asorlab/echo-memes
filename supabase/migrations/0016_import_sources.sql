@@ -30,6 +30,7 @@ create table if not exists import_sources (
 );
 
 alter table import_sources enable row level security;
+drop policy if exists "dono ve so as proprias fontes" on import_sources;
 create policy "dono ve so as proprias fontes" on import_sources for all
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
@@ -54,6 +55,7 @@ create table if not exists import_runs (
 );
 
 alter table import_runs enable row level security;
+drop policy if exists "dono ve so as proprias execucoes" on import_runs;
 create policy "dono ve so as proprias execucoes" on import_runs for all
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
@@ -86,6 +88,7 @@ create table if not exists import_items (
 );
 
 alter table import_items enable row level security;
+drop policy if exists "dono ve so os proprios itens" on import_items;
 create policy "dono ve so os proprios itens" on import_items for all
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
