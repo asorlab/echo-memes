@@ -6,10 +6,11 @@ import { createServerClient } from "@supabase/ssr";
 // src/lib/supabase/client.ts), entao o middleware consegue validar ela
 // antes de qualquer pagina privada renderizar.
 //
-// Publicas: /login (senao ninguem entra), e /api/* fica fora do matcher —
-// x-import/x-media sao publicas por design (funcionam antes de salvar um
-// meme, ver src/app/api/x-import e x-media), sem checagem de sessao la
-// nem aqui.
+// Publicas: /login (senao ninguem entra). /api/* fica fora do matcher —
+// cada rota valida a propria sessao com protegerRota (src/lib/server/
+// apiGuard.ts), responde 401 em JSON em vez de redirect (hardening fase 3:
+// x-import/x-media eram publicas de verdade, sem checagem nenhuma — agora
+// exigem sessao como todas as outras rotas privadas).
 const ROTAS_PUBLICAS = ["/login"];
 
 function ehRotaPublica(pathname: string): boolean {

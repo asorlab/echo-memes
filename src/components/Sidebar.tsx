@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  Radio, Sparkles, LogOut, X, ChevronDown, AudioLines, ImageIcon, LayoutTemplate, Compass, Lightbulb, Trash2, Rss,
+  Radio, Sparkles, LogOut, X, ChevronDown, AudioLines, ImageIcon, Compass, Lightbulb, Trash2, Rss, FolderKanban, Users,
+  Clapperboard, BarChart3, Dna, Type, Palette, BadgeCheck,
 } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
@@ -20,28 +21,51 @@ interface GrupoNav {
   itens: ItemNav[];
 }
 
-// Estrutura consolidada — poucas bibliotecas grandes, cada uma com tipos/
-// tags/filtros internos (SFX vive dentro de Audios, Overlays/Transicoes/
-// Presets vivem dentro de Visuais, Shots/Hooks vivem dentro de
-// Inspiracoes), em vez de uma pagina pra cada subtipo.
+// Agrupamento aprovado no mapa de navegacao (P3, 30/09): LIBRARY/
+// REFERENCE/STUDIO/SYSTEM. Fontes, Brand Assets e Paletas ja existiam como
+// paginas mas nao tinham entrada nenhuma na sidebar (achado da auditoria) —
+// entram aqui pela primeira vez. Templates deixou de ser item proprio: e
+// filtro tipo="template" dentro de Visuais (mesma tabela, ver /visuais).
+// "Refs" nao estava na lista que a Livia aprovou, mas continua existindo
+// (regra de "nada desaparece") — mantive dentro de Reference.
 const GRUPOS: GrupoNav[] = [
   {
-    id: "edicao",
-    rotulo: "Edição",
+    id: "library",
+    rotulo: "Library",
     itens: [
       { id: "memes", nome: "Memes", icone: Sparkles, href: "/" },
-      { id: "contas", nome: "Contas", icone: Rss, href: "/contas" },
       { id: "audios", nome: "Áudios", icone: AudioLines, href: "/audios" },
       { id: "visuais", nome: "Visuais", icone: ImageIcon, href: "/visuais" },
-      { id: "templates", nome: "Templates", icone: LayoutTemplate, href: "/templates" },
+      { id: "fontes", nome: "Fontes", icone: Type, href: "/fontes" },
+      { id: "brand", nome: "Brand Assets", icone: BadgeCheck, href: "/brand" },
+      { id: "paletas", nome: "Paletas", icone: Palette, href: "/paletas" },
     ],
   },
   {
-    id: "referencias",
-    rotulo: "Referências",
+    id: "reference",
+    rotulo: "Reference",
     itens: [
+      { id: "contas", nome: "Contas", icone: Rss, href: "/contas" },
       { id: "edicoes-ref", nome: "Edits", icone: Compass, href: "/edicoes" },
       { id: "inspiracoes", nome: "Inspirações", icone: Lightbulb, href: "/inspiracoes" },
+      { id: "refs", nome: "Refs", icone: Users, href: "/refs" },
+    ],
+  },
+  {
+    id: "studio",
+    rotulo: "Studio",
+    itens: [
+      { id: "projetos", nome: "Projetos", icone: FolderKanban, href: "/projetos" },
+      { id: "production", nome: "Production", icone: Clapperboard, href: "/production" },
+      { id: "editing-dna", nome: "Editing DNA", icone: Dna, href: "/editing-dna" },
+      { id: "analytics", nome: "Analytics", icone: BarChart3, href: "/analytics" },
+    ],
+  },
+  {
+    id: "system",
+    rotulo: "System",
+    itens: [
+      { id: "lixeira", nome: "Lixeira", icone: Trash2, href: "/lixeira" },
     ],
   },
 ];
@@ -64,6 +88,12 @@ export default function Sidebar({ aberta = false, fechar = () => {} }: SidebarPr
       if (salvo) setColapsados(new Set(JSON.parse(salvo)));
     } catch { /* ignora */ }
   }, []);
+
+  const grupoAtivoId = useMemo(() => {
+    const item = GRUPOS.flatMap((g) => g.itens.map((i) => ({ ...i, grupoId: g.id })))
+      .find((i) => pathname === i.href || pathname.startsWith(`${i.href}/`));
+    return item?.grupoId ?? null;
+  }, [pathname]);
 
   function alternarGrupo(id: string) {
     setColapsados((atual) => {
@@ -92,28 +122,33 @@ export default function Sidebar({ aberta = false, fechar = () => {} }: SidebarPr
           </button>
         </div>
 
-        <nav className="flex-1 space-y-3 overflow-y-auto px-3 py-4">
+        <nav className="flex-1 space-y-2 overflow-y-auto px-3 py-3">
           {GRUPOS.map((grupo) => {
-            const aberto = !colapsados.has(grupo.id);
+            const aberto = grupoAtivoId === grupo.id || !colapsados.has(grupo.id);
+            const painelId = `grupo-assets-${grupo.id}`;
             return (
               <div key={grupo.id}>
                 <button
+                  type="button"
                   onClick={() => alternarGrupo(grupo.id)}
-                  className="mb-1 flex w-full items-center justify-between px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-neutral-600 hover:text-neutral-400"
+                  aria-expanded={aberto}
+                  aria-controls={painelId}
+                  className="flex w-full items-center justify-between rounded px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-neutral-600 hover:text-neutral-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-teal-500/50"
                 >
                   {grupo.rotulo}
                   <ChevronDown className={`h-3 w-3 transition-transform ${aberto ? "" : "-rotate-90"}`} />
                 </button>
                 {aberto && (
-                  <div className="space-y-0.5">
+                  <div id={painelId} className="space-y-0.5">
                     {grupo.itens.map((item) => {
                       const Icone = item.icone;
-                      const ativo = pathname === item.href;
+                      const ativo = pathname === item.href || pathname.startsWith(`${item.href}/`);
                       return (
                         <button
                           key={item.id}
                           onClick={() => { router.push(item.href); fechar(); }}
-                          className={`flex min-h-[40px] w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
+                          aria-current={ativo ? "page" : undefined}
+                          className={`flex min-h-[40px] w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-teal-500/50 ${
                             ativo ? "bg-teal-500/10 text-teal-300" : "text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
                           }`}
                         >
@@ -131,15 +166,6 @@ export default function Sidebar({ aberta = false, fechar = () => {} }: SidebarPr
         </nav>
 
         <div className="space-y-0.5 border-t border-neutral-800 px-3 py-3">
-          <button
-            onClick={() => { router.push("/lixeira"); fechar(); }}
-            className={`flex min-h-[40px] w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
-              pathname === "/lixeira" ? "bg-teal-500/10 text-teal-300" : "text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
-            }`}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            <span className="font-mono text-[13px]">Lixeira</span>
-          </button>
           <button
             onClick={sair}
             className="flex min-h-[44px] w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"

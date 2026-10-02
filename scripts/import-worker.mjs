@@ -5,6 +5,8 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
+import crypto from "node:crypto";
+import { chromium } from "playwright";
 
 // ECHO // ASSETS — worker de sincronizacao de contas (Fontes -> Execucoes ->
 // Itens). Desacoplado de onde roda: local (modo continuo, igual sempre foi)
@@ -100,6 +102,150 @@ async function listarVideosPerfilTiktok(url) {
   return itens;
 }
 
+// Hashtag e um feed sem fim (algoritmico, nao cronologico garantido) — por
+// isso sempre limitado a --playlist-end N, nunca lido por inteiro. Dedup
+// contra import_items existentes acontece igual ao perfil, no chamador.
+async function listarVideosHashtagTiktok(url, limite) {
+  console.log(`🔎 Lendo hashtag (top ${limite}): ${url}`);
+  const saida = await executarYtDlp(["--flat-playlist", "--playlist-end", String(limite), "--print", "%(id)s|||%(webpage_url)s|||%(uploader)s", url]);
+  const linhas = saida.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const vistos = new Set();
+  const itens = [];
+  for (const linha of linhas) {
+    const [id, webpageUrl, uploader] = linha.split("|||");
+    if (!id || vistos.has(id)) continue;
+    vistos.add(id);
+    itens.push({ externalId: id, url: webpageUrl || url, autor: uploader || null });
+  }
+  return itens;
+}
+
+// --------------------------------------------------
+// FALLBACK DE DISCOVERY DE PERFIL — o extrator "tiktok:user" do yt-dlp as
+// vezes nao consegue extrair o secUid de um perfil (mensagem "private or
+// embedding disabled" / "Unable to extract secondary user ID"), mesmo em
+// contas publicas — confirmado direto no JSON que a propria pagina do
+// TikTok embute (privateAccount:false, isEmbedBanned:false). Uma requisicao
+// HTTP simples (curl/fetch) e bloqueada pelo WAF anti-robo do TikTok; so um
+// navegador de verdade passa. Por isso o Playwright entra so aqui, como
+// fallback pontual — abre, le o secUid, fecha imediatamente. Nunca baixa
+// video (isso continua 100% no yt-dlp).
+const PADRAO_FALHA_DISCOVERY_PERFIL = /private or embedding disabled|unable to extract secondary user id/i;
+
+async function obterSecUidViaPlaywright(profileUrl) {
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage();
+    await page.goto(profileUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+    // O TikTok as vezes serve uma pagina de desafio anti-robo ("Please
+    // wait...") antes da pagina real — ela resolve sozinha em alguns
+    // segundos (confirmado empiricamente). Espera o elemento certo
+    // aparecer em vez de checar imediatamente, sem atrasar o caso comum
+    // (quando a pagina real ja vem direto).
+    await page.waitForSelector("#__UNIVERSAL_DATA_FOR_REHYDRATION__", { timeout: 15000 }).catch(() => {});
+    return await page.evaluate(() => {
+      const el = document.getElementById("__UNIVERSAL_DATA_FOR_REHYDRATION__");
+      if (!el) return null;
+      try {
+        const json = JSON.parse(el.textContent);
+        const user = json.__DEFAULT_SCOPE__?.["webapp.user-detail"]?.userInfo?.user;
+        if (!user) return null;
+        return { secUid: user.secUid ?? null, privateAccount: !!user.privateAccount, isEmbedBanned: !!user.isEmbedBanned };
+      } catch {
+        return null;
+      }
+    });
+  } finally {
+    await browser.close();
+  }
+}
+
+function erroClassificado(mensagem, categoria) {
+  const erro = new Error(mensagem);
+  erro.categoria = categoria;
+  return erro;
+}
+
+// Troca a URL de cada item (que sai errada — com o secUid no lugar do
+// @usuario — quando a descoberta usou "tiktokuser:<secUid>") pela URL real
+// do perfil, pra download/exibicao ficarem corretos.
+function normalizarUrlsPerfil(itens, username) {
+  return itens.map((item) => ({ ...item, url: `https://www.tiktok.com/@${username}/video/${item.externalId}` }));
+}
+
+async function discoverPerfilTiktok(fonte) {
+  // 1. secUid em cache — tenta direto, sem abrir navegador.
+  if (fonte.sec_uid) {
+    try {
+      const itens = await listarVideosPerfilTiktok(`tiktokuser:${fonte.sec_uid}`);
+      console.log("   [discovery: cached_secuid]");
+      return normalizarUrlsPerfil(itens, fonte.username);
+    } catch {
+      console.log("   ⚠ secUid em cache parou de funcionar — invalidando e tentando de novo.");
+      await supabase.from("import_sources").update({ sec_uid: null }).eq("id", fonte.id);
+    }
+  }
+
+  // 2. metodo direto (mais leve, tentativa padrao).
+  try {
+    const itens = await listarVideosPerfilTiktok(fonte.profile_url);
+    console.log("   [discovery: direct]");
+    return itens;
+  } catch (erroDireto) {
+    const mensagem = erroDireto instanceof Error ? erroDireto.message : String(erroDireto);
+    if (!PADRAO_FALHA_DISCOVERY_PERFIL.test(mensagem)) throw erroDireto; // erro de outro tipo, nao mascarar
+
+    console.log("   ⚠ Discovery direto falhou (padrao conhecido) — acionando fallback Playwright...");
+    let dados;
+    try {
+      dados = await obterSecUidViaPlaywright(fonte.profile_url);
+    } catch (erroPlaywright) {
+      throw erroClassificado(`Nao foi possivel abrir o perfil pra obter o secUid: ${erroPlaywright.message}`, "secuid_resolution_failed");
+    }
+    if (!dados) throw erroClassificado("Playwright abriu a pagina mas nao encontrou os dados do perfil (formato da pagina pode ter mudado).", "secuid_resolution_failed");
+    if (dados.privateAccount) throw erroClassificado("Conta confirmada como privada pelo proprio TikTok (privateAccount=true).", "private_account");
+    if (!dados.secUid) throw erroClassificado("secUid nao encontrado nos dados do perfil.", "secuid_resolution_failed");
+
+    let itens;
+    try {
+      itens = await listarVideosPerfilTiktok(`tiktokuser:${dados.secUid}`);
+    } catch (erroFinal) {
+      throw erroClassificado(`secUid obtido, mas a descoberta ainda falhou: ${erroFinal.message}`, "profile_discovery_failed");
+    }
+    await supabase.from("import_sources").update({ sec_uid: dados.secUid }).eq("id", fonte.id);
+    console.log("   [discovery: playwright_secuid_fallback] — secUid cacheado pra proxima sincronizacao");
+    return normalizarUrlsPerfil(itens, fonte.username);
+  }
+}
+
+// --------------------------------------------------
+// DISCOVERY — abstracao por plataforma+tipo, pra poder trocar so o
+// mecanismo de uma combinacao (ex.: tiktok+hashtag) sem tocar no resto do
+// worker. Perfil usa yt-dlp + fallback Playwright (ver acima). Hashtag
+// ainda nao tem provider configurado — falha rapido e claro em vez de
+// tentar algo fragil.
+// --------------------------------------------------
+
+// hashtag: null = sem provider plugado ainda (yt-dlp nao consegue mais
+// descobrir /tag/... — ver scripts/import-worker.mjs:listarVideosHashtagTiktok,
+// mantida pronta pra reusar assim que um provider real for escolhido).
+const DISCOVERY_PROVIDERS = {
+  tiktok: {
+    profile: (fonte) => discoverPerfilTiktok(fonte),
+    hashtag: null,
+  },
+};
+
+async function discoverSource(fonte) {
+  const tipo = fonte.source_type || "profile";
+  const providers = DISCOVERY_PROVIDERS[fonte.platform];
+  const provider = providers?.[tipo];
+  if (!provider) {
+    throw new Error(`Discovery automatico de "${tipo}" ainda nao tem um provider configurado nessa plataforma. Perfil continua funcionando normalmente.`);
+  }
+  return provider(fonte);
+}
+
 async function obterInfoVideo(url) {
   const saida = await executarYtDlp(["--dump-single-json", "--no-playlist", url]);
   return JSON.parse(saida);
@@ -119,6 +265,26 @@ async function baixarVideo(url, externalId) {
 
 async function memeExistente(userId, plataforma, externalId) {
   const { data, error } = await supabase.from("memes").select("id").eq("user_id", userId).eq("plataforma", plataforma).eq("external_id", externalId).limit(1).maybeSingle();
+  if (error) throw error;
+  return data?.id ?? null;
+}
+
+// Camada 2 de dedup: mesmo conteudo baixado de fontes/URLs diferentes
+// (ex.: o mesmo video em @conta1 e @conta2) tem o MESMO hash de arquivo,
+// mesmo com external_id/URL diferentes — Camada 1 (external_id) nao pega
+// isso, so essa camada.
+async function calcularHashArquivo(caminho) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash("sha256");
+    const stream = fs.createReadStream(caminho);
+    stream.on("data", (d) => hash.update(d));
+    stream.on("end", () => resolve(hash.digest("hex")));
+    stream.on("error", reject);
+  });
+}
+
+async function memeExistentePorHash(userId, hash) {
+  const { data, error } = await supabase.from("memes").select("id").eq("user_id", userId).eq("arquivo_hash", hash).limit(1).maybeSingle();
   if (error) throw error;
   return data?.id ?? null;
 }
@@ -145,13 +311,13 @@ function dataPublicacao(info) {
   return null;
 }
 
-async function criarMeme({ userId, plataforma, info, urlOriginal, caminho, externalId }) {
+async function criarMeme({ userId, plataforma, info, urlOriginal, caminho, externalId, hash }) {
   const criador = info.uploader_id || info.uploader || info.channel || null;
   const titulo = info.title || info.description?.slice(0, 120) || "Vídeo importado";
   const tags = criador ? [String(criador).replace(/^@/, "").toLowerCase()] : [];
   const { data, error } = await supabase.from("memes").insert({
     user_id: userId, titulo: String(titulo).slice(0, 200), imagem_url: caminho, link_origem: urlOriginal,
-    explicacao: "", tags, plataforma, criador, categoria: "geral", publicado_em: dataPublicacao(info), external_id: externalId,
+    explicacao: "", tags, plataforma, criador, categoria: "geral", publicado_em: dataPublicacao(info), external_id: externalId, arquivo_hash: hash,
   }).select("id").single();
   if (error) throw error;
   return data.id;
@@ -210,27 +376,32 @@ async function processarExecucao(run) {
   const { data: fonte, error: erroFonte } = await supabase.from("import_sources").select("*").eq("id", run.source_id).single();
   if (erroFonte) throw erroFonte;
 
-  console.log(`Fonte: @${fonte.username} (${fonte.platform})`);
+  const tipoFonte = fonte.source_type || "profile";
+  console.log(`Fonte: ${tipoFonte === "hashtag" ? "#" : "@"}${fonte.username} (${fonte.platform}, ${tipoFonte})`);
 
   try {
     // ---- descoberta ----
-    let descobertos = [];
-    if (fonte.platform === "tiktok") {
-      descobertos = await listarVideosPerfilTiktok(fonte.profile_url);
-    } else {
-      throw new Error(`Plataforma "${fonte.platform}" ainda não tem sincronização de perfil implementada.`);
-    }
-    console.log(`✓ ${descobertos.length} vídeo(s) encontrados no perfil.`);
+    const descobertos = await discoverSource(fonte);
+    console.log(`✓ ${descobertos.length} vídeo(s) encontrados.`);
 
     const { data: existentes, error: erroExistentes } = await supabase.from("import_items").select("external_id").eq("source_id", fonte.id);
     if (erroExistentes) throw erroExistentes;
     const idsExistentes = new Set((existentes ?? []).map((r) => r.external_id));
     const novos = descobertos.filter((d) => !idsExistentes.has(d.externalId));
 
-    console.log(`✓ ${novos.length} novo(s) (${descobertos.length - novos.length} já conhecido(s)).`);
+    // Limite de quantidade (digitado na tela) — corta ANTES de criar
+    // import_items, nunca depois do download. descobertos/novos ja vem do
+    // mais recente pro mais antigo, entao os N primeiros = os N mais
+    // recentes ainda nao conhecidos. O resto simplesmente nao vira item
+    // nenhum agora — fica disponivel pra "Importar mais antigos" depois,
+    // sem aparecer como fila pendente.
+    const limite = run.limite_selecionado;
+    const selecionados = limite != null ? novos.slice(0, limite) : novos;
 
-    if (novos.length > 0) {
-      const linhas = novos.map((n) => ({
+    console.log(`✓ ${novos.length} novo(s) (${descobertos.length - novos.length} já conhecido(s)) — selecionados pra essa execução: ${selecionados.length}${limite != null ? ` (limite pedido: ${limite})` : ""}.`);
+
+    if (selecionados.length > 0) {
+      const linhas = selecionados.map((n) => ({
         source_id: fonte.id, user_id: fonte.user_id, platform: fonte.platform, external_id: n.externalId,
         original_url: n.url, author: n.autor, status: "pending", discovered_in_run_id: run.id,
       }));
@@ -238,7 +409,7 @@ async function processarExecucao(run) {
       if (erroInsert) throw erroInsert;
     }
 
-    await atualizarExecucao(run.id, { status: "processing", total_found: descobertos.length, total_new: novos.length });
+    await atualizarExecucao(run.id, { status: "processing", total_found: descobertos.length, total_new: novos.length, total_selected: selecionados.length });
 
     // ---- processamento (todos os pending da fonte, nao so os novos —
     // assim retry de item falho entra no mesmo fluxo) ----
@@ -271,8 +442,26 @@ async function processarExecucao(run) {
       try {
         const info = await obterInfoVideo(item.original_url);
         arquivo = await baixarVideo(item.original_url, item.external_id);
+        const hash = await calcularHashArquivo(arquivo);
+
+        // Camada 2: conteudo identico ja existe (outra fonte/URL/external_id
+        // diferente, mesmo arquivo) — nao faz outro upload nem outro meme,
+        // so vincula esse item ao meme que ja existe e descarta o temporario.
+        const memeIdIgual = await memeExistentePorHash(fonte.user_id, hash);
+        if (memeIdIgual) {
+          await supabase.from("import_items").update({
+            status: "skipped", meme_id: memeIdIgual, processed_in_run_id: run.id, attempts: item.attempts + 1,
+            author: info.uploader_id || info.uploader || item.author, caption: info.description?.slice(0, 500) ?? item.caption,
+            published_at: dataPublicacao(info), updated_at: new Date().toISOString(),
+          }).eq("id", item.id);
+          console.log("   ↷ arquivo idêntico a um meme existente (hash). Vinculado, sem duplicar.");
+          ignorados++;
+          await atualizarExecucao(run.id, { total_skipped: ignorados, total_downloaded: baixados, total_failed: falhados });
+          continue;
+        }
+
         const caminho = await enviarParaStorage(fonte.user_id, fonte.platform, item.external_id, arquivo);
-        const memeId = await criarMeme({ userId: fonte.user_id, plataforma: fonte.platform, info, urlOriginal: item.original_url, caminho, externalId: item.external_id });
+        const memeId = await criarMeme({ userId: fonte.user_id, plataforma: fonte.platform, info, urlOriginal: item.original_url, caminho, externalId: item.external_id, hash });
 
         await supabase.from("import_items").update({
           status: "completed", meme_id: memeId, processed_in_run_id: run.id, attempts: item.attempts + 1,
@@ -313,7 +502,10 @@ async function processarExecucao(run) {
     const mensagem = erro instanceof Error ? erro.message : String(erro);
     const cancelada = await execucaoFoiCancelada(run.id).catch(() => false);
     if (cancelada) { console.log("\n⊘ Cancelada."); return; }
-    await atualizarExecucao(run.id, { status: "failed", error_message: mensagem.slice(0, 5000), finished_at: new Date().toISOString() });
+    await atualizarExecucao(run.id, {
+      status: "failed", error_message: mensagem.slice(0, 5000), error_category: erro?.categoria ?? null,
+      finished_at: new Date().toISOString(),
+    });
     throw erro;
   }
 }

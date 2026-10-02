@@ -6,25 +6,42 @@ import { useUser } from "@/lib/useUser";
 import { useToast } from "@/components/ToastProvider";
 import {
   listarFontes, adicionarFonteEExecutar, sincronizarFonte, listarExecucoes,
-  type Fonte, type Execucao,
+  type Fonte, type Execucao, type TipoFonte,
 } from "@/lib/contas";
 import ContaDrawer from "@/components/contas/ContaDrawer";
+
+const LIMITES_HASHTAG = [50, 100, 250] as const;
 
 function detectarPlataforma(url: string): string | null {
   if (/tiktok\.com/i.test(url)) return "tiktok";
   if (/\b(x\.com|twitter\.com)\b/i.test(url)) return "x";
   return null;
 }
-function extrairUsername(url: string, platform: string): string | null {
+
+interface LinkAnalisado {
+  platform: string;
+  tipo: TipoFonte;
+  identificador: string;
+}
+
+// Hashtag do TikTok (/tag/xxx) e perfil (/@xxx) sao os dois formatos
+// suportados hoje. Hashtag e um feed sem fim, entao vira uma Fonte com
+// limite obrigatorio (ver LIMITES_HASHTAG); perfil segue sem limite.
+function analisarLink(url: string): LinkAnalisado | null {
+  const platform = detectarPlataforma(url);
+  if (!platform) return null;
   try {
     const u = new URL(url);
     if (platform === "tiktok") {
-      const m = u.pathname.match(/^\/@([^/]+)/i);
-      return m ? m[1] : null;
+      const hashtag = u.pathname.match(/^\/tag\/([^/]+)/i);
+      if (hashtag) return { platform, tipo: "hashtag", identificador: decodeURIComponent(hashtag[1]) };
+      const perfil = u.pathname.match(/^\/@([^/]+)/i);
+      if (perfil) return { platform, tipo: "profile", identificador: perfil[1] };
+      return null;
     }
     if (platform === "x") {
       const m = u.pathname.match(/^\/([^/]+)/i);
-      return m ? m[1] : null;
+      return m ? { platform, tipo: "profile", identificador: m[1] } : null;
     }
     return null;
   } catch {
@@ -47,6 +64,7 @@ export default function ContasPage() {
   const [carregando, setCarregando] = useState(true);
   const [adicionarAberto, setAdicionarAberto] = useState(false);
   const [novoLink, setNovoLink] = useState("");
+  const [limiteHashtag, setLimiteHashtag] = useState<number>(50);
   const [adicionando, setAdicionando] = useState(false);
   const [sincronizandoId, setSincronizandoId] = useState<string | null>(null);
   const [fonteAbertaId, setFonteAbertaId] = useState<string | null>(null);
@@ -65,16 +83,22 @@ export default function ContasPage() {
   async function adicionar() {
     if (!user || !novoLink.trim()) return;
     const link = novoLink.trim();
-    const platform = detectarPlataforma(link);
-    if (!platform) { toast("Cola um link de perfil do TikTok ou X"); return; }
-    const username = extrairUsername(link, platform);
-    if (!username) { toast("Não consegui identificar o @usuário nesse link"); return; }
+    const analisado = analisarLink(link);
+    if (!analisado) { toast("Cola um link de perfil (@usuário) ou hashtag (/tag/...) do TikTok, ou de perfil do X"); return; }
 
     setAdicionando(true);
     try {
-      await adicionarFonteEExecutar(user.id, platform, username, link);
+      await adicionarFonteEExecutar(
+        user.id,
+        analisado.platform,
+        analisado.identificador,
+        link,
+        analisado.tipo,
+        analisado.tipo === "hashtag" ? limiteHashtag : null,
+      );
       toast("Conta adicionada — sincronização entra na fila");
       setNovoLink("");
+      setLimiteHashtag(50);
       setAdicionarAberto(false);
       await carregar();
     } catch {
@@ -84,12 +108,14 @@ export default function ContasPage() {
     }
   }
 
+  const linkAnalisado = analisarLink(novoLink.trim());
+
   async function sincronizar(fonte: Fonte) {
     if (!user) return;
     setSincronizandoId(fonte.id);
     try {
       await sincronizarFonte(user.id, fonte.id);
-      toast(`Sincronização de @${fonte.username} entrou na fila`);
+      toast(`Sincronização de ${fonte.tipo === "hashtag" ? "#" : "@"}${fonte.username} entrou na fila`);
       await carregar();
     } catch {
       toast("Erro ao sincronizar");
@@ -113,21 +139,50 @@ export default function ContasPage() {
           </button>
           {adicionarAberto && (
             <div className="absolute right-0 top-9 z-10 w-80 rounded-md border border-neutral-800 bg-neutral-950 p-3 shadow-xl">
-              <p className="mb-2 text-[10px] uppercase tracking-wide text-neutral-600">Link do perfil (TikTok ou X)</p>
+              <p className="mb-2 text-[10px] uppercase tracking-wide text-neutral-600">Link de perfil ou hashtag (TikTok) / perfil (X)</p>
               <div className="flex items-center gap-1.5">
                 <input
                   autoFocus
                   value={novoLink}
                   onChange={(e) => setNovoLink(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") adicionar(); if (e.key === "Escape") setAdicionarAberto(false); }}
-                  placeholder="https://www.tiktok.com/@perfil"
+                  onKeyDown={(e) => { if (e.key === "Enter" && linkAnalisado) adicionar(); if (e.key === "Escape") setAdicionarAberto(false); }}
+                  placeholder="https://www.tiktok.com/@perfil ou /tag/memes"
                   className="min-w-0 flex-1 rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-1.5 text-sm text-neutral-200 placeholder-neutral-600 outline-none"
                 />
                 <button onClick={() => setAdicionarAberto(false)} className="text-neutral-600 hover:text-neutral-300"><X className="h-3.5 w-3.5" /></button>
               </div>
+
+              {linkAnalisado?.tipo === "hashtag" && (
+                <div className="mt-2">
+                  <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">
+                    Vídeos por sincronização (#{linkAnalisado.identificador})
+                  </p>
+                  <div className="flex gap-1.5">
+                    {LIMITES_HASHTAG.map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setLimiteHashtag(n)}
+                        className={`flex-1 rounded-md border px-2 py-1.5 text-xs ${
+                          limiteHashtag === n ? "border-teal-500/50 bg-teal-500/10 text-teal-300" : "border-neutral-800 text-neutral-500 hover:text-neutral-300"
+                        }`}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-2 rounded-md border border-[#F0997B]/30 bg-[#F0997B]/5 p-2">
+                    <p className="text-[11px] text-[#F0997B]">Descoberta automática ainda não tem um provedor configurado</p>
+                    <p className="mt-1 text-[10px] leading-relaxed text-neutral-500">
+                      Você pode adicionar a fonte agora — ela fica pronta na sua lista — mas o TikTok mudou a página de hashtag e o método usado hoje (yt-dlp) não consegue mais ler essa página. Ao sincronizar, a execução vai falhar com esse motivo até um provedor de descoberta ser configurado. Perfil (@usuário) continua funcionando normalmente.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <button
                 onClick={adicionar}
-                disabled={!novoLink.trim() || adicionando}
+                disabled={!linkAnalisado || adicionando}
                 className="mt-2 flex min-h-[34px] w-full items-center justify-center rounded-md bg-teal-500 text-xs font-medium text-neutral-950 hover:opacity-90 disabled:opacity-40"
               >
                 {adicionando ? "Adicionando..." : "Adicionar"}
@@ -160,8 +215,13 @@ export default function ContasPage() {
                 className="flex flex-col gap-2 rounded-md border border-neutral-800 bg-neutral-900/60 p-3 text-left hover:border-teal-500/30"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <p className="truncate text-sm font-medium text-neutral-100">@{f.username}</p>
-                  <span className="shrink-0 rounded-full bg-neutral-800 px-1.5 py-0.5 text-[10px] text-neutral-400">{ROTULO_PLATAFORMA[f.platform] ?? f.platform}</span>
+                  <p className="truncate text-sm font-medium text-neutral-100">{f.tipo === "hashtag" ? "#" : "@"}{f.username}</p>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {f.tipo === "hashtag" && (
+                      <span className="rounded-full bg-neutral-800 px-1.5 py-0.5 text-[10px] text-neutral-500">top {f.limiteItens ?? "?"}</span>
+                    )}
+                    <span className="rounded-full bg-neutral-800 px-1.5 py-0.5 text-[10px] text-neutral-400">{ROTULO_PLATAFORMA[f.platform] ?? f.platform}</span>
+                  </div>
                 </div>
                 <p className="text-xs text-neutral-500">
                   {f.totalImportado} meme{f.totalImportado === 1 ? "" : "s"} · última sincronização {formatarData(f.ultimaSincronizacao)}

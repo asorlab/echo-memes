@@ -9,6 +9,7 @@ import {
   Star, Clock, Smartphone, MonitorPlay, Volume2, VolumeX, Mic, MicOff, History,
 } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import { apiFetch } from "@/lib/apiFetch";
 import { useUser } from "@/lib/useUser";
 import { useToast } from "@/components/ToastProvider";
 import { enviarArquivo, resolverUrl, urlAssinada, urlsAssinadas, ehCaminhoInterno } from "@/lib/storage";
@@ -257,11 +258,11 @@ export default function MemesPage() {
     if (!user || !linkImportar.trim() || importando) return;
     setImportando(true);
     try {
-      const respostaInfo = await fetch(`/api/x-import?url=${encodeURIComponent(linkImportar.trim())}`);
+      const respostaInfo = await apiFetch(`/api/x-import?url=${encodeURIComponent(linkImportar.trim())}`);
       const info = await respostaInfo.json();
       if (!respostaInfo.ok) { toast(info.erro ?? "Não consegui importar esse link"); return; }
 
-      const respostaMidia = await fetch(`/api/x-media?url=${encodeURIComponent(info.midiaUrl)}`);
+      const respostaMidia = await apiFetch(`/api/x-media?url=${encodeURIComponent(info.midiaUrl)}`);
       if (!respostaMidia.ok) { toast("Não consegui baixar a mídia desse post"); return; }
       const blob = await respostaMidia.blob();
       const extensao = info.tipo === "video" ? "mp4" : "jpg";

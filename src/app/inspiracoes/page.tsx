@@ -10,7 +10,7 @@ const FORMATOS_CONTEUDO = [
 const config: AssetLibraryConfig = {
   tabela: "inspiracoes",
   titulo: "Inspirações",
-  descricao: "Hooks, shots, looks, cenários, estética — o que quero lembrar.",
+  descricao: "Hooks, shots, looks, cenários, estética.",
   icone: Lightbulb,
   aceitaArquivo: "image/*,video/*",
   tituloPadrao: "Nova inspiração",

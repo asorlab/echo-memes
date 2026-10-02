@@ -35,6 +35,11 @@ export interface AssetLibraryConfig {
   extrairMetadados?: (arquivo: File) => Promise<Record<string, unknown> | null>;
   campoDuracao?: string;
   campoTipoPreview?: "audio" | "imagem" | "video" | "auto";
+  // Quando a "biblioteca" e na verdade um subconjunto de uma tabela maior
+  // (ex.: Templates vive dentro de "visuais" com tipo='template') — filtra
+  // toda leitura por esse campo/valor e ja preenche ele em todo insert, pra
+  // nao vazar nem deixar criar item de outro tipo por engano.
+  filtroFixo?: { campo: string; valor: string };
 }
 
 interface Registro {
@@ -79,7 +84,9 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
     if (!user) return;
     if (primeiraCarga.current) setCarregando(true);
     const supabase = supabaseBrowser();
-    const { data, error } = await supabase.from(config.tabela).select("*").eq("user_id", user.id).is("excluido_em", null).order("created_at", { ascending: false });
+    let query = supabase.from(config.tabela).select("*").eq("user_id", user.id).is("excluido_em", null).order("created_at", { ascending: false });
+    if (config.filtroFixo) query = query.eq(config.filtroFixo.campo, config.filtroFixo.valor);
+    const { data, error } = await query;
     setCarregando(false);
     primeiraCarga.current = false;
     if (error) { toast(`Erro ao carregar: ${error.message}`); return; }
@@ -90,7 +97,7 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
       setUsos((usosData as Registro[]) ?? []);
     }
     urlsAssinadas(carregados.map((it) => it.arquivo_url)).then(setUrls);
-  }, [user, config.tabela, config.tabelaUsos, toast]);
+  }, [user, config.tabela, config.tabelaUsos, config.filtroFixo, toast]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -105,7 +112,9 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
         ]);
         const titulo = arquivo.name.replace(/\.[^.]+$/, "").slice(0, 60) || config.tituloPadrao;
         await supabaseBrowser().from(config.tabela).insert({
-          user_id: user.id, titulo, arquivo_url: url, ...(metadados ?? {}),
+          user_id: user.id, titulo, arquivo_url: url,
+          ...(config.filtroFixo ? { [config.filtroFixo.campo]: config.filtroFixo.valor } : {}),
+          ...(metadados ?? {}),
         });
       }
       toast(arquivos.length > 1 ? `${arquivos.length} adicionados` : "Adicionado");
@@ -119,7 +128,10 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
 
   async function adicionarPorLink() {
     if (!user || !novoLink.trim()) return;
-    const { error } = await supabaseBrowser().from(config.tabela).insert({ user_id: user.id, titulo: config.tituloPadrao, link_origem: novoLink.trim() });
+    const { error } = await supabaseBrowser().from(config.tabela).insert({
+      user_id: user.id, titulo: config.tituloPadrao, link_origem: novoLink.trim(),
+      ...(config.filtroFixo ? { [config.filtroFixo.campo]: config.filtroFixo.valor } : {}),
+    });
     if (error) { toast("Erro ao adicionar"); return; }
     setNovoLink("");
     toast("Adicionado");
@@ -415,7 +427,7 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
                     <div className="mb-2 space-y-1">
                       {(usosPorItem[drawerItem.id] ?? []).map((u) => (
                         <div key={u.id} className="flex items-center justify-between gap-2 rounded-md border border-neutral-800 bg-neutral-900/60 px-2.5 py-1.5">
-                          <span className="text-xs text-neutral-300">{u.contexto} — {new Date(u.data + "T12:00:00").toLocaleDateString("pt-BR")}</span>
+                          <span className="text-xs text-neutral-300">{u.contexto} · {new Date(u.data + "T12:00:00").toLocaleDateString("pt-BR")}</span>
                           <button onClick={() => excluirUso(u.id)} className="text-neutral-600 hover:text-[#F0997B]"><Trash2 className="h-3 w-3" /></button>
                         </div>
                       ))}

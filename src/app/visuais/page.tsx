@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Plus, Trash2, Image as ImageIcon, Search, Download, Star, X, History, ExternalLink } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useUser } from "@/lib/useUser";
@@ -12,7 +13,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import EditableField from "@/components/ui/EditableField";
 import { extrairMetadadosArquivo } from "@/lib/metadados";
 
-type TipoVisual = "overlay" | "transicao" | "textura" | "png_elemento" | "preset_lut";
+type TipoVisual = "overlay" | "transicao" | "textura" | "png_elemento" | "preset_lut" | "b_roll" | "green_screen" | "gif" | "template";
 type AppCompativel = "capcut" | "premiere" | "davinci" | "lut_generico" | "outro";
 type EstiloVisual = "cinematic" | "vibrante" | "preto_e_branco" | "vintage" | "cru" | "outro";
 type Momento = "gancho" | "transicao" | "punchline" | "fecho";
@@ -49,7 +50,9 @@ function ehVideo(url: string): boolean {
 const TIPOS: { id: TipoVisual; rotulo: string }[] = [
   { id: "overlay", rotulo: "Overlay" }, { id: "transicao", rotulo: "Transição" }, { id: "textura", rotulo: "Textura" },
   { id: "png_elemento", rotulo: "PNG/Elemento" }, { id: "preset_lut", rotulo: "Preset/LUT" },
+  { id: "b_roll", rotulo: "B-roll" }, { id: "green_screen", rotulo: "Green screen" }, { id: "gif", rotulo: "GIF" }, { id: "template", rotulo: "Template" },
 ];
+const TIPOS_VALIDOS = new Set<string>(TIPOS.map((t) => t.id));
 const APPS: { id: AppCompativel; rotulo: string }[] = [
   { id: "capcut", rotulo: "CapCut" }, { id: "premiere", rotulo: "Premiere" }, { id: "davinci", rotulo: "DaVinci" },
   { id: "lut_generico", rotulo: "LUT genérico" }, { id: "outro", rotulo: "Outro" },
@@ -65,11 +68,28 @@ const MOMENTOS: { id: Momento; rotulo: string }[] = [
 export default function VisuaisPage() {
   const { user } = useUser();
   const toast = useToast();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [itens, setItens] = useState<Visual[]>([]);
   const [usos, setUsos] = useState<VisualUso[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [busca, setBusca] = useState("");
-  const [tipoAtivo, setTipoAtivo] = useState<TipoVisual | null>(null);
+
+  // Filtro de tipo: URL (?tipo=) primeiro — isso e o que permite
+  // /visuais?tipo=template funcionar como link direto pro que antes era a
+  // pagina /templates separada (agora so um filtro aqui, mesma tabela).
+  const [tipoAtivo, setTipoAtivoInterno] = useState<TipoVisual | null>(() => {
+    const doUrl = searchParams.get("tipo");
+    return doUrl && TIPOS_VALIDOS.has(doUrl) ? (doUrl as TipoVisual) : null;
+  });
+  const setTipoAtivo = useCallback((tipo: TipoVisual | null) => {
+    setTipoAtivoInterno(tipo);
+    const params = new URLSearchParams(Array.from(searchParams.entries()));
+    if (tipo) params.set("tipo", tipo); else params.delete("tipo");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname);
+  }, [pathname, router, searchParams]);
   const [soFavoritos, setSoFavoritos] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [drawerId, setDrawerId] = useState<string | null>(null);
@@ -209,7 +229,7 @@ export default function VisuaisPage() {
           <button key={t.id} onClick={() => setTipoAtivo(t.id === tipoAtivo ? null : t.id)} className={`rounded-full border px-2.5 py-1 text-[11px] font-mono ${tipoAtivo === t.id ? "border-teal-500/50 bg-teal-500/10 text-teal-300" : "border-neutral-800 text-neutral-500 hover:text-neutral-300"}`}>{t.rotulo}</button>
         ))}
       </div>
-      <p className="mb-2 text-[10px] text-neutral-600">Novos arquivos entram como &quot;{TIPOS.find((t) => t.id === tipoAtivo)?.rotulo ?? "Overlay"}&quot; — escolhe o tipo no filtro acima antes de enviar.</p>
+      <p className="mb-2 text-[10px] text-neutral-600">Novos arquivos entram como &quot;{TIPOS.find((t) => t.id === tipoAtivo)?.rotulo ?? "Overlay"}&quot;. Escolha o tipo no filtro acima antes de enviar.</p>
 
       <div className="mb-4 flex flex-wrap items-center gap-1.5">
         <button onClick={() => setSoFavoritos((v) => !v)} className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-mono ${soFavoritos ? "border-amber-500/50 bg-amber-500/10 text-amber-300" : "border-neutral-800 text-neutral-500 hover:text-neutral-300"}`}>
@@ -344,7 +364,7 @@ export default function VisuaisPage() {
                   <div className="mb-2 space-y-1">
                     {(usosPorItem[drawerItem.id] ?? []).map((u) => (
                       <div key={u.id} className="flex items-center justify-between gap-2 rounded-md border border-neutral-800 bg-neutral-900/60 px-2.5 py-1.5">
-                        <span className="text-xs text-neutral-300">{u.contexto} — {new Date(u.data + "T12:00:00").toLocaleDateString("pt-BR")}</span>
+                        <span className="text-xs text-neutral-300">{u.contexto} · {new Date(u.data + "T12:00:00").toLocaleDateString("pt-BR")}</span>
                         <button onClick={() => excluirUso(u.id)} className="text-neutral-600 hover:text-[#F0997B]"><Trash2 className="h-3 w-3" /></button>
                       </div>
                     ))}

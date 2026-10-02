@@ -1,0 +1,15 @@
+-- ECHO — ponteiro (rodada de hardening de seguranca, 30/09). As funcoes
+-- abaixo, historicamente criadas neste repo (0013/0015/0023/0024), foram
+-- endurecidas mais uma vez pela rodada de seguranca — mas as migrations
+-- CORRETIVAS ficaram centralizadas no repo echo-os-app pra nao duplicar
+-- (mesmo banco Postgres compartilhado, create or replace function
+-- atualiza pros dois apps de uma vez so). Rode as migrations abaixo do
+-- OUTRO repo (echo-os-app-/supabase/migrations/) se ainda nao rodou:
+--
+--   0067_aal2_dados_sensiveis.sql       -- RLS sensivel a MFA/AAL2
+--   0068_rate_limit_hardening.sql       -- checar_rate_limit + checar_rate_limit_upload()
+--   0069_tracking_publico_hardening.sql -- nao afeta este repo (iveasor/asor)
+--   0070_audit_log_hardening.sql        -- registrar_evento_auditoria com allowlist
+--
+-- Nao ha nada novo pra rodar AQUI alem do que esses arquivos ja cobrem.
+select 1;
