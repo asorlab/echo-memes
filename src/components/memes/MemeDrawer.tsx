@@ -300,7 +300,7 @@ export default function MemeDrawer({ meme, arquivoUrlResolvido, usos, onFechar, 
               <div className="space-y-1">
                 {usos.map((u) => (
                   <div key={u.id} className="flex items-center justify-between gap-2 rounded-md border border-neutral-800 bg-neutral-900/60 px-2.5 py-1.5">
-                    <span className="text-xs text-neutral-300">{u.contexto} — {new Date(u.data + "T12:00:00").toLocaleDateString("pt-BR")}</span>
+                    <span className="text-xs text-neutral-300">{u.contexto} · {new Date(u.data + "T12:00:00").toLocaleDateString("pt-BR")}</span>
                     <button onClick={() => onExcluirUso(u.id)} className="text-neutral-600 hover:text-[#F0997B]"><Trash2 className="h-3 w-3" /></button>
                   </div>
                 ))}

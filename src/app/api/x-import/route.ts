@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { protegerRota, ehResposta } from "@/lib/server/apiGuard";
 
 // Busca dados de um post do X (texto, autor, melhor midia) via endpoint publico
-// de sindicacao que o proprio X usa pra embeds — nao precisa de login/API key.
+// de sindicacao que o proprio X usa pra embeds — nao precisa de login/API key
+// pra falar com o X, mas a ROTA em si exige sessao ECHO valida (hardening
+// fase 3 — antes nao tinha autenticacao nenhuma, qualquer um na internet
+// podia chamar indefinidamente).
 
 interface VarianteVideo {
   bitrate?: number;
@@ -21,6 +25,9 @@ function extrairId(url: string): string | null {
 }
 
 export async function GET(request: NextRequest) {
+  const guarda = await protegerRota(request, { limite: 30, janelaSeg: 3600 });
+  if (ehResposta(guarda)) return guarda;
+
   const url = request.nextUrl.searchParams.get("url")?.trim();
   if (!url) return NextResponse.json({ erro: "Link obrigatorio" }, { status: 400 });
 

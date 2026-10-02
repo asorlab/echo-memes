@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
+import { protegerRota, ehResposta } from "@/lib/server/apiGuard";
 
 // Proxy da midia do X — o navegador nao consegue baixar video.twimg.com/pbs.twimg.com
-// direto por CORS, entao o servidor busca e repassa os bytes. So aceita esses dois
-// hosts (evita virar proxy aberto pra qualquer URL).
+// direto por CORS, entao o servidor busca e repassa os bytes. Allowlist de host
+// (so esses dois) continua, mas isso nunca substitui autenticacao — allowlist
+// so evita virar proxy aberto pra QUALQUER url, nao decide quem pode chamar a
+// rota. Hardening fase 3: exige sessao ECHO valida antes de proxiar qualquer
+// coisa.
 
 const HOSTS_PERMITIDOS = ["video.twimg.com", "pbs.twimg.com"];
 
 export async function GET(request: NextRequest) {
+  const guarda = await protegerRota(request, { limite: 30, janelaSeg: 3600 });
+  if (ehResposta(guarda)) return guarda;
+
   const url = request.nextUrl.searchParams.get("url");
   if (!url) return NextResponse.json({ erro: "url obrigatoria" }, { status: 400 });
 

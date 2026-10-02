@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { X, RotateCcw, CircleCheck, CircleX, Clock3, Loader2, SkipForward } from "lucide-react";
+import { X, RotateCcw, CircleCheck, CircleX, Clock3, Loader2, SkipForward, RefreshCw } from "lucide-react";
 import { useUser } from "@/lib/useUser";
 import { useToast } from "@/components/ToastProvider";
 import {
-  listarItens, tentarItemNovamente, type Fonte, type ItemImportado, type StatusItem,
+  listarItens, tentarItemNovamente, sincronizarFonte, type Fonte, type ItemImportado, type StatusItem,
 } from "@/lib/contas";
 
 const ROTULO_STATUS: Record<StatusItem, string> = {
@@ -42,6 +42,8 @@ export default function ContaDrawer({ fonte, onFechar, onMudou }: { fonte: Fonte
   const [filtro, setFiltro] = useState<"todos" | StatusItem>("todos");
   const [detalheAbertoId, setDetalheAbertoId] = useState<string | null>(null);
   const [tentandoId, setTentandoId] = useState<string | null>(null);
+  const [quantidade, setQuantidade] = useState("50");
+  const [sincronizando, setSincronizando] = useState(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -51,6 +53,22 @@ export default function ContaDrawer({ fonte, onFechar, onMudou }: { fonte: Fonte
   }, [fonte.id]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  async function sincronizarComQuantidade() {
+    if (!user) return;
+    const numero = Number(quantidade);
+    if (!Number.isInteger(numero) || numero <= 0) { toast("Digite um número inteiro maior que zero"); return; }
+    setSincronizando(true);
+    try {
+      await sincronizarFonte(user.id, fonte.id, numero);
+      toast(`Importando até ${numero} vídeo(s) novo(s) — acompanhe abaixo`);
+      onMudou();
+    } catch {
+      toast("Erro ao sincronizar");
+    } finally {
+      setSincronizando(false);
+    }
+  }
 
   async function tentarNovamente(item: ItemImportado) {
     if (!user) return;
@@ -82,11 +100,34 @@ export default function ContaDrawer({ fonte, onFechar, onMudou }: { fonte: Fonte
       <div className="relative flex h-full w-full max-w-lg flex-col border-l border-neutral-800 bg-neutral-950">
         <div className="flex items-center justify-between border-b border-neutral-800 px-5 py-4">
           <div>
-            <p className="text-lg font-semibold text-neutral-100">@{fonte.username}</p>
+            <p className="text-lg font-semibold text-neutral-100">{fonte.tipo === "hashtag" ? "#" : "@"}{fonte.username}</p>
             <p className="text-xs text-neutral-600">{contagens.completed} importados · {contagens.failed} falharam · {contagens.skipped} já existiam</p>
           </div>
           <button onClick={onFechar} className="text-neutral-500 hover:text-neutral-300"><X className="h-4 w-4" /></button>
         </div>
+
+        {fonte.tipo === "profile" && (
+          <div className="flex items-center gap-2 border-b border-neutral-800 px-5 py-3">
+            <div className="flex-1">
+              <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">Quantidade de vídeos</p>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={quantidade}
+                onChange={(e) => setQuantidade(e.target.value)}
+                className="w-full rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-1.5 text-sm text-neutral-200 outline-none"
+              />
+            </div>
+            <button
+              onClick={sincronizarComQuantidade}
+              disabled={sincronizando}
+              className="flex min-h-[36px] shrink-0 items-center gap-1.5 self-end rounded-md bg-teal-500 px-3 text-xs font-medium text-neutral-950 hover:opacity-90 disabled:opacity-40"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${sincronizando ? "animate-spin" : ""}`} /> {sincronizando ? "Importando..." : "Importar"}
+            </button>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-1.5 border-b border-neutral-800 px-5 py-3">
           {([["todos", "Todos"], ["completed", "Importados"], ["failed", "Falharam"], ["skipped", "Já existiam"], ["pending", "Em andamento"]] as const).map(([id, rotulo]) => (

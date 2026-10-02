@@ -5,7 +5,7 @@ import AssetLibrary, { type AssetLibraryConfig } from "@/components/assets/Asset
 const config: AssetLibraryConfig = {
   tabela: "fontes",
   titulo: "Fontes",
-  descricao: "Tipografias salvas — pra título, legenda ou corpo de texto.",
+  descricao: "Pra título, legenda ou corpo de texto.",
   icone: Type,
   aceitaArquivo: "*/*",
   tituloPadrao: "Nova fonte",

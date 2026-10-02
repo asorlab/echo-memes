@@ -192,7 +192,7 @@ export default function AudiosPage() {
     <div>
       <PageHeader
         titulo="Áudios"
-        descricao="SFX, músicas, falas, trends e ambientes — tudo que toca."
+        descricao="SFX, músicas, falas, trends e ambientes."
         acao={
           <button onClick={() => fileInputRef.current?.click()} disabled={enviando} className="flex min-h-[44px] items-center gap-2 rounded-md bg-teal-500 px-4 text-sm font-medium text-neutral-950 hover:opacity-90 disabled:opacity-50">
             <Plus className="h-4 w-4" /> {enviando ? "Enviando..." : "Adicionar"}
@@ -212,7 +212,7 @@ export default function AudiosPage() {
           <button key={t.id} onClick={() => setTipoAtivo(t.id === tipoAtivo ? null : t.id)} className={`rounded-full border px-2.5 py-1 text-[11px] font-mono ${tipoAtivo === t.id ? "border-teal-500/50 bg-teal-500/10 text-teal-300" : "border-neutral-800 text-neutral-500 hover:text-neutral-300"}`}>{t.rotulo}</button>
         ))}
       </div>
-      <p className="mb-2 text-[10px] text-neutral-600">Novos arquivos entram como &quot;{TIPOS.find((t) => t.id === tipoAtivo)?.rotulo ?? "Música"}&quot; — escolhe o tipo no filtro acima antes de enviar.</p>
+      <p className="mb-2 text-[10px] text-neutral-600">Novos arquivos entram como &quot;{TIPOS.find((t) => t.id === tipoAtivo)?.rotulo ?? "Música"}&quot;. Escolha o tipo no filtro acima antes de enviar.</p>
 
       <div className="mb-4 flex flex-wrap items-center gap-1.5">
         <button onClick={() => setSoFavoritos((v) => !v)} className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-mono ${soFavoritos ? "border-amber-500/50 bg-amber-500/10 text-amber-300" : "border-neutral-800 text-neutral-500 hover:text-neutral-300"}`}>
@@ -363,7 +363,7 @@ export default function AudiosPage() {
                   <div className="mb-2 space-y-1">
                     {(usosPorAudio[drawerItem.id] ?? []).map((u) => (
                       <div key={u.id} className="flex items-center justify-between gap-2 rounded-md border border-neutral-800 bg-neutral-900/60 px-2.5 py-1.5">
-                        <span className="text-xs text-neutral-300">{u.contexto} — {new Date(u.data + "T12:00:00").toLocaleDateString("pt-BR")}</span>
+                        <span className="text-xs text-neutral-300">{u.contexto} · {new Date(u.data + "T12:00:00").toLocaleDateString("pt-BR")}</span>
                         <button onClick={() => excluirUso(u.id)} className="text-neutral-600 hover:text-[#F0997B]"><Trash2 className="h-3 w-3" /></button>
                       </div>
                     ))}

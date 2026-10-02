@@ -13,7 +13,6 @@ export const TABELAS_COM_LIXEIRA: ConfigTabela[] = [
   { tabela: "memes", campoArquivo: "imagem_url", rotulo: "Meme" },
   { tabela: "audios", campoArquivo: "arquivo_url", rotulo: "Áudio" },
   { tabela: "visuais", campoArquivo: "arquivo_url", rotulo: "Visual" },
-  { tabela: "templates", campoArquivo: "arquivo_url", rotulo: "Template" },
   { tabela: "fontes", campoArquivo: "arquivo_url", rotulo: "Fonte" },
   { tabela: "brand_assets", campoArquivo: "arquivo_url", rotulo: "Brand asset" },
   { tabela: "paletas", campoArquivo: "arquivo_url", rotulo: "Paleta" },

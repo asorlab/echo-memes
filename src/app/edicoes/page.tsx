@@ -6,7 +6,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { useUser } from "@/lib/useUser";
 import { useToast } from "@/components/ToastProvider";
 import EditableField from "@/components/ui/EditableField";
-import { resolverUrl, urlsAssinadas } from "@/lib/storage";
+import { enviarArquivo, resolverUrl, urlsAssinadas } from "@/lib/storage";
 
 interface Edicao {
   id: string; titulo: string; arquivo_url: string | null; link_origem: string | null;
@@ -55,8 +55,10 @@ export default function EdicoesPage() {
   const [novaNota, setNovaNota] = useState("");
   const [novoLink, setNovoLink] = useState("");
   const [adicionarAberto, setAdicionarAberto] = useState(false);
+  const [enviando, setEnviando] = useState(false);
   const [urls, setUrls] = useState<Record<string, string>>({});
   const videoRef = useRef<HTMLVideoElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const primeiraCarga = useRef(true);
   const carregar = useCallback(async () => {
@@ -80,10 +82,29 @@ export default function EdicoesPage() {
 
   async function adicionar() {
     if (!user || !novoLink.trim()) return;
-    const { error } = await supabaseBrowser().from("edicoes_referencia").insert({ user_id: user.id, titulo: "Nova edição de referência", link_origem: novoLink.trim() });
+    const { error } = await supabaseBrowser().from("edicoes_referencia").insert({ user_id: user.id, titulo: "Nova referência", link_origem: novoLink.trim() });
     if (error) { toast("Erro ao adicionar"); return; }
     setNovoLink("");
     carregar();
+  }
+
+  async function adicionarArquivos(arquivos: FileList) {
+    if (!user) return;
+    setEnviando(true);
+    try {
+      for (const arquivo of Array.from(arquivos)) {
+        const url = await enviarArquivo("edicoes_referencia", user.id, arquivo);
+        const titulo = arquivo.name.replace(/\.[^.]+$/, "").slice(0, 60) || "Nova referência";
+        const { error } = await supabaseBrowser().from("edicoes_referencia").insert({ user_id: user.id, titulo, arquivo_url: url });
+        if (error) throw error;
+      }
+      toast(arquivos.length > 1 ? `${arquivos.length} referências adicionadas` : "Referência adicionada");
+      carregar();
+    } catch {
+      toast("Erro ao enviar arquivo");
+    } finally {
+      setEnviando(false);
+    }
   }
 
   async function atualizar(id: string, patch: Record<string, unknown>) {
@@ -151,23 +172,32 @@ export default function EdicoesPage() {
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-neutral-100">Edits</h1>
-        <div className="relative">
-          <button onClick={() => setAdicionarAberto((v) => !v)} className="flex min-h-[32px] items-center gap-1.5 rounded-md bg-teal-500 px-2.5 text-xs font-medium text-neutral-950 hover:opacity-90">
-            <Plus className="h-3.5 w-3.5" /> Adicionar
+        <div>
+          <h1 className="text-lg font-semibold text-neutral-100">Referências</h1>
+          <p className="text-xs text-neutral-600">Edição, cortes, luz, look, cenário.</p>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button onClick={() => fileInputRef.current?.click()} disabled={enviando} className="flex min-h-[32px] items-center gap-1.5 rounded-md border border-neutral-800 px-2.5 text-xs font-medium text-neutral-300 hover:border-teal-500/30 disabled:opacity-50">
+            {enviando ? "Enviando..." : "Enviar arquivo"}
           </button>
-          {adicionarAberto && (
-            <div className="absolute right-0 top-9 z-10 w-72 rounded-md border border-neutral-800 bg-neutral-950 p-2 shadow-xl">
-              <input
-                autoFocus
-                value={novoLink}
-                onChange={(e) => setNovoLink(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") { adicionar(); setAdicionarAberto(false); } if (e.key === "Escape") setAdicionarAberto(false); }}
-                placeholder="Cola o link do vídeo…"
-                className="w-full rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-1.5 text-sm text-neutral-200 placeholder-neutral-600 outline-none"
-              />
-            </div>
-          )}
+          <input ref={fileInputRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) adicionarArquivos(e.target.files); e.target.value = ""; }} />
+          <div className="relative">
+            <button onClick={() => setAdicionarAberto((v) => !v)} className="flex min-h-[32px] items-center gap-1.5 rounded-md bg-teal-500 px-2.5 text-xs font-medium text-neutral-950 hover:opacity-90">
+              <Plus className="h-3.5 w-3.5" /> Link
+            </button>
+            {adicionarAberto && (
+              <div className="absolute right-0 top-9 z-10 w-72 rounded-md border border-neutral-800 bg-neutral-950 p-2 shadow-xl">
+                <input
+                  autoFocus
+                  value={novoLink}
+                  onChange={(e) => setNovoLink(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { adicionar(); setAdicionarAberto(false); } if (e.key === "Escape") setAdicionarAberto(false); }}
+                  placeholder="Cola o link do vídeo/print…"
+                  className="w-full rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-1.5 text-sm text-neutral-200 placeholder-neutral-600 outline-none"
+                />
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -197,7 +227,7 @@ export default function EdicoesPage() {
       ) : filtrados.length === 0 ? (
         <button onClick={() => setAdicionarAberto(true)} className="flex w-full flex-col items-center gap-2 py-16 text-neutral-600 hover:text-neutral-400">
           <Film className="h-6 w-6" />
-          <span className="text-sm">{itens.length === 0 ? "Nenhum edit ainda" : "Nada encontrado"}</span>
+          <span className="text-sm">{itens.length === 0 ? "Nenhuma referência ainda" : "Nada encontrado"}</span>
           {itens.length === 0 && <span className="text-xs text-teal-500">+ Adicionar</span>}
         </button>
       ) : (
@@ -210,6 +240,9 @@ export default function EdicoesPage() {
                 <div className="relative mb-1.5 flex aspect-video items-center justify-center overflow-hidden rounded-md bg-neutral-900">
                   {ehVideo && resolverUrl(e.arquivo_url, urls) ? (
                     <video src={resolverUrl(e.arquivo_url, urls)} muted playsInline className="h-full w-full object-cover" />
+                  ) : e.arquivo_url && resolverUrl(e.arquivo_url, urls) ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={resolverUrl(e.arquivo_url, urls)} alt="" className="h-full w-full object-cover" />
                   ) : (
                     <Film className="h-5 w-5 text-neutral-700" />
                   )}
@@ -226,7 +259,9 @@ export default function EdicoesPage() {
                   )}
                 </div>
                 <p className="truncate text-xs font-medium text-neutral-200 group-hover:text-neutral-100">{e.titulo}</p>
-                <p className="truncate text-[10px] text-neutral-600">{e.criador || (e.link_origem && dominio(e.link_origem)) || "—"}</p>
+                {(e.criador || e.link_origem) && (
+                  <p className="truncate text-[10px] text-neutral-600">{e.criador || dominio(e.link_origem!)}</p>
+                )}
                 {e.tags.length > 0 && <p className="truncate text-[10px] text-neutral-600">{e.tags.slice(0, 2).join(" · ")}</p>}
               </button>
             );
@@ -246,6 +281,10 @@ export default function EdicoesPage() {
             </div>
             <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
               {ehVideoLocal && resolverUrl(drawerItem.arquivo_url, urls) && <video ref={videoRef} src={resolverUrl(drawerItem.arquivo_url, urls)} controls playsInline className="max-h-[240px] w-full rounded bg-black object-contain" />}
+              {!ehVideoLocal && drawerItem.arquivo_url && resolverUrl(drawerItem.arquivo_url, urls) && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={resolverUrl(drawerItem.arquivo_url, urls)} alt="" className="max-h-[240px] w-full rounded bg-black object-contain" />
+              )}
               {drawerItem.link_origem && (
                 <a href={drawerItem.link_origem} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs text-sky-400 hover:text-sky-300">
                   <ExternalLink className="h-3.5 w-3.5" /> {drawerItem.link_origem}
@@ -263,7 +302,7 @@ export default function EdicoesPage() {
                 </div>
               </div>
               <div>
-                <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">O que quero pegar daqui</p>
+                <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">O que gostei nessa referência?</p>
                 <EditableField as="textarea" value={drawerItem.ideia_uso ?? ""} placeholder='Ex.: "ritmo da intro", "estilo da legenda", "color"...' onSave={(v) => atualizar(drawerItem.id, { ideia_uso: v || null })} displayClassName="text-sm text-neutral-200" />
               </div>
               <div>
@@ -333,7 +372,7 @@ export default function EdicoesPage() {
               </div>
             </div>
             <div className="flex items-center justify-between border-t border-neutral-800 px-5 py-3">
-              <button onClick={() => { if (window.confirm("Excluir esta edição de referência?")) excluir(drawerItem.id); }} className="flex items-center gap-1.5 text-xs text-[#F0997B] hover:opacity-80">
+              <button onClick={() => { if (window.confirm("Excluir esta referência?")) excluir(drawerItem.id); }} className="flex items-center gap-1.5 text-xs text-[#F0997B] hover:opacity-80">
                 <Trash2 className="h-3.5 w-3.5" /> Excluir
               </button>
               <button onClick={() => setDrawerId(null)} className="rounded-md bg-teal-500 px-3 py-1.5 text-xs font-medium text-neutral-950 hover:bg-teal-400">Fechar</button>

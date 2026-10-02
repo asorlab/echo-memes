@@ -5,7 +5,7 @@ import AssetLibrary, { type AssetLibraryConfig } from "@/components/assets/Asset
 const config: AssetLibraryConfig = {
   tabela: "brand_assets",
   titulo: "Brand Assets",
-  descricao: "Logo, marca d'água, assinatura — identidade visual pronta pra usar.",
+  descricao: "Logo, marca d'água, assinatura.",
   icone: Gem,
   aceitaArquivo: "image/*",
   tituloPadrao: "Novo brand asset",

@@ -4,7 +4,7 @@ import Shell from "./shell";
 
 export const metadata: Metadata = {
   title: "ECHO // ASSETS",
-  description: "Biblioteca criativa — memes, SFX, áudios, overlays e tudo que acelera a edição.",
+  description: "Memes, SFX, áudios, overlays e mais recursos de edição.",
   icons: {
     icon: "/favicon.svg",
   },

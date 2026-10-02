@@ -2,12 +2,15 @@ import { supabaseBrowser } from "./supabase/client";
 
 export type StatusRun = "pending" | "discovering" | "processing" | "completed" | "failed" | "cancelled";
 export type StatusItem = "pending" | "downloading" | "completed" | "failed" | "skipped";
+export type TipoFonte = "profile" | "hashtag";
 
 export interface Fonte {
   id: string;
   platform: string;
   username: string;
   profileUrl: string;
+  tipo: TipoFonte;
+  limiteItens: number | null;
   totalImportado: number;
   ultimaSincronizacao: string | null;
   criadoEm: string;
@@ -19,10 +22,13 @@ export interface Execucao {
   status: StatusRun;
   totalFound: number;
   totalNew: number;
+  totalSelected: number;
+  limiteSelecionado: number | null;
   totalDownloaded: number;
   totalSkipped: number;
   totalFailed: number;
   errorMessage: string | null;
+  errorCategory: string | null;
   startedAt: string | null;
   finishedAt: string | null;
   createdAt: string;
@@ -51,6 +57,8 @@ function mapFonte(r: Record<string, unknown>): Fonte {
     platform: r.platform as string,
     username: r.username as string,
     profileUrl: r.profile_url as string,
+    tipo: ((r.source_type as string) ?? "profile") as TipoFonte,
+    limiteItens: (r.limite_itens as number) ?? null,
     totalImportado: (r.total_imported as number) ?? 0,
     ultimaSincronizacao: (r.last_synced_at as string) ?? null,
     criadoEm: r.created_at as string,
@@ -64,10 +72,13 @@ function mapExecucao(r: Record<string, unknown>): Execucao {
     status: r.status as StatusRun,
     totalFound: (r.total_found as number) ?? 0,
     totalNew: (r.total_new as number) ?? 0,
+    totalSelected: (r.total_selected as number) ?? 0,
+    limiteSelecionado: (r.limite_selecionado as number) ?? null,
     totalDownloaded: (r.total_downloaded as number) ?? 0,
     totalSkipped: (r.total_skipped as number) ?? 0,
     totalFailed: (r.total_failed as number) ?? 0,
     errorMessage: (r.error_message as string) ?? null,
+    errorCategory: (r.error_category as string) ?? null,
     startedAt: (r.started_at as string) ?? null,
     finishedAt: (r.finished_at as string) ?? null,
     createdAt: r.created_at as string,
@@ -138,7 +149,15 @@ export async function listarItens(sourceId: string): Promise<ItemImportado[]> {
 // Cria a fonte se ainda nao existir (mesmo platform+username), e sempre
 // cria uma nova execucao "pending" pra ela — e essa execucao pendente que,
 // mais pra frente, o worker (local por enquanto) vai processar.
-export async function adicionarFonteEExecutar(userId: string, platform: string, username: string, profileUrl: string): Promise<{ fonte: Fonte; execucao: Execucao }> {
+export async function adicionarFonteEExecutar(
+  userId: string,
+  platform: string,
+  username: string,
+  profileUrl: string,
+  tipo: TipoFonte = "profile",
+  limiteItens: number | null = null,
+  limiteSelecionado: number | null = null,
+): Promise<{ fonte: Fonte; execucao: Execucao }> {
   const supabase = supabaseBrowser();
   const { data: existente } = await supabase
     .from("import_sources")
@@ -152,7 +171,7 @@ export async function adicionarFonteEExecutar(userId: string, platform: string, 
   if (!fonteRow) {
     const { data, error } = await supabase
       .from("import_sources")
-      .insert({ user_id: userId, platform, username, profile_url: profileUrl })
+      .insert({ user_id: userId, platform, username, profile_url: profileUrl, source_type: tipo, limite_itens: limiteItens })
       .select("*")
       .single();
     if (error) throw error;
@@ -161,7 +180,7 @@ export async function adicionarFonteEExecutar(userId: string, platform: string, 
 
   const { data: execucao, error: erroExecucao } = await supabase
     .from("import_runs")
-    .insert({ source_id: fonteRow.id, user_id: userId, status: "pending" })
+    .insert({ source_id: fonteRow.id, user_id: userId, status: "pending", limite_selecionado: limiteSelecionado })
     .select("*")
     .single();
   if (erroExecucao) throw erroExecucao;
@@ -169,10 +188,14 @@ export async function adicionarFonteEExecutar(userId: string, platform: string, 
   return { fonte: mapFonte(fonteRow), execucao: mapExecucao(execucao) };
 }
 
-export async function sincronizarFonte(userId: string, sourceId: string): Promise<Execucao> {
+// limiteSelecionado null = "Importar novos" (sem teto, comportamento
+// padrao). Um numero = quantos dos ainda-nao-conhecidos processar nessa
+// execucao especifica (usado tanto pra primeira importacao quanto pra
+// "Importar mais antigos").
+export async function sincronizarFonte(userId: string, sourceId: string, limiteSelecionado: number | null = null): Promise<Execucao> {
   const { data, error } = await supabaseBrowser()
     .from("import_runs")
-    .insert({ source_id: sourceId, user_id: userId, status: "pending" })
+    .insert({ source_id: sourceId, user_id: userId, status: "pending", limite_selecionado: limiteSelecionado })
     .select("*")
     .single();
   if (error) throw error;

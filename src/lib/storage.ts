@@ -30,13 +30,10 @@ export async function enviarArquivo(pasta: string, userId: string, arquivo: File
 
   const supabase = supabaseBrowser();
 
-  // Rate limit de upload — mesma tabela/funcao usada pelas rotas de API do
-  // echo-os-app (banco compartilhado), chamada direto do navegador.
-  const { data: permitido, error: erroLimite } = await supabase.rpc("checar_rate_limit", {
-    p_chave: `upload:${userId}`,
-    p_limite: 40,
-    p_janela_seg: 3600,
-  });
+  // Rate limit de upload, chamado direto do navegador — hardening fase 4:
+  // checar_rate_limit_upload() (mesmo banco compartilhado do echo-os-app)
+  // nao aceita limite/janela como parametro, fica fixo no servidor.
+  const { data: permitido, error: erroLimite } = await supabase.rpc("checar_rate_limit_upload");
   if (!erroLimite && permitido === false) {
     throw new Error("Muitos uploads em pouco tempo — tenta de novo em instantes");
   }
