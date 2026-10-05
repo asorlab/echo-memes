@@ -465,7 +465,7 @@ export default function MemesPage() {
                   ) : (
                     <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-neutral-700">
                       <Sparkles className="h-5 w-5" />
-                      <span className="text-[10px]">Sem arquivo</span>
+                      <span className="text-[10px]">{m.imagemUrl ? "arquivo indisponível" : "sem arquivo"}</span>
                     </div>
                   )}
                   {enviandoId === m.id && <span className="absolute inset-0 flex items-center justify-center bg-black/60 text-[10px] text-neutral-300">Enviando...</span>}
