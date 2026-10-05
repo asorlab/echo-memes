@@ -54,7 +54,7 @@ export default function ProjetosPage() {
     <div>
       <PageHeader
         titulo="Projetos"
-        descricao="Conteúdos que você vai produzir — referências, assets planejados e assets usados, tudo num só lugar."
+        descricao="Conteúdos que você vai produzir, referências, assets planejados e assets usados, tudo num só lugar."
         acao={
           <button onClick={() => setNovoAberto(true)} className="flex min-h-[44px] items-center gap-2 rounded-md bg-teal-500 px-4 text-sm font-medium text-neutral-950 hover:opacity-90">
             <Plus className="h-4 w-4" /> Novo projeto

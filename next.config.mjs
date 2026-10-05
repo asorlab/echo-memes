@@ -13,9 +13,14 @@
 // mesma concessao do echo-os-app — Next App Router injeta script inline
 // de hidratacao e o app usa style={{...}} dinamico — dívida documentada,
 // nao nonce ainda.
+// media-src: video e audio dos Memes/Audios/Visuais/Edicoes tambem vem do
+// Storage por URL assinada (https). Sem esta diretiva o default-src 'self'
+// bloqueava <video>/<audio> e o card mostrava "Sem arquivo" mesmo com o
+// arquivo existindo.
 const CSP = [
   "default-src 'self'",
   "img-src 'self' data: blob: https:",
+  "media-src 'self' blob: https:",
   "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",

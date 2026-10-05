@@ -195,7 +195,7 @@ export default function ProductionPage() {
                     <p className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-100">{p.titulo}</p>
                     <span className="shrink-0 rounded-full border border-neutral-700 px-2 py-0.5 text-[10px] text-neutral-400">{ROTULO_STATUS_PROJETO[p.status]}</span>
                   </div>
-                  <p className="text-[11px] text-neutral-500">{p.tipo ?? "—"}</p>
+                  <p className="text-[11px] text-neutral-500">{p.tipo ?? "-"}</p>
                 </Card>
               ))}
             </div>

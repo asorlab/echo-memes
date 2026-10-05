@@ -18,7 +18,7 @@ export async function enviarBruto(userId: string, arquivo: File): Promise<{ cami
   const supabase = supabaseBrowser();
   const { data: permitido, error: erroLimite } = await supabase.rpc("checar_rate_limit_upload");
   if (!erroLimite && permitido === false) {
-    throw new Error("Muitos uploads em pouco tempo — tenta de novo em instantes");
+    throw new Error("Muitos uploads em pouco tempo, tenta de novo em instantes");
   }
   const extensao = arquivo.name.split(".").pop();
   const caminho = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${extensao}`;

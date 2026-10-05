@@ -349,7 +349,7 @@ export default function EdicoesPage() {
                     {(timestampsPorEdicao[drawerItem.id] ?? []).map((t) => (
                       <div key={t.id} className="flex items-center justify-between gap-2 rounded-md border border-neutral-800 bg-neutral-900/60 px-2.5 py-1.5">
                         <button onClick={() => ehVideoLocal && irPara(t.inicio_seg)} className={`font-mono text-xs ${ehVideoLocal ? "text-teal-300 hover:underline" : "text-neutral-300"}`}>
-                          {formatarTempo(t.inicio_seg)}{t.fim_seg != null && `–${formatarTempo(t.fim_seg)}`}
+                          {formatarTempo(t.inicio_seg)}{t.fim_seg != null && `-${formatarTempo(t.fim_seg)}`}
                         </button>
                         <span className="flex-1 truncate text-xs text-neutral-400">{t.nota}</span>
                         <button onClick={() => excluirTimestamp(t.id)} className="text-neutral-600 hover:text-[#F0997B]"><Trash2 className="h-3 w-3" /></button>

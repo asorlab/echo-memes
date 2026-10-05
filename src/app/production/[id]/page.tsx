@@ -102,7 +102,7 @@ export default function ProductionProjectPage() {
           <div>
             <p className="mb-1 text-[10px] uppercase text-neutral-600">Tipo</p>
             <select value={projeto.tipo ?? ""} onChange={(e) => salvar({ tipo: (e.target.value || null) as ProducaoProjeto["tipo"] })} className="min-h-[32px] w-full rounded-md border border-neutral-800 bg-neutral-950 px-1.5 text-xs text-neutral-300 outline-none focus:border-teal-500/40">
-              <option value="">—</option>
+              <option value="">-</option>
               {["vlog", "grwm", "fashion", "gaming", "cover", "asmr", "lifestyle", "outro"].map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
@@ -115,7 +115,7 @@ export default function ProductionProjectPage() {
           <div>
             <p className="mb-1 text-[10px] uppercase text-neutral-600">Editing DNA</p>
             <select value={projeto.dna_id ?? ""} onChange={(e) => salvar({ dna_id: e.target.value || null })} className="min-h-[32px] w-full rounded-md border border-neutral-800 bg-neutral-950 px-1.5 text-xs text-neutral-300 outline-none focus:border-teal-500/40">
-              <option value="">—</option>
+              <option value="">-</option>
               {dnas.map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}
             </select>
           </div>
@@ -178,7 +178,7 @@ function AbaTranscricao({ brutos, userId }: { brutos: Bruto[]; userId: string })
   async function iniciar() {
     const t = await criarTranscricao(userId, brutoId);
     setTranscricao(t);
-    toast("Registro de transcrição criado — processamento real ainda não está conectado a nenhum provider");
+    toast("Registro de transcrição criado, processamento real ainda não está conectado a nenhum provider");
   }
 
   if (brutos.length === 0) return <EmptyState icone={FileText} titulo="Associe um bruto primeiro" />;
@@ -191,11 +191,11 @@ function AbaTranscricao({ brutos, userId }: { brutos: Bruto[]; userId: string })
       <Card className="p-4">
         {!transcricao ? (
           <div className="py-6 text-center">
-            <p className="mb-3 text-xs text-neutral-500">Nenhuma transcrição ainda. Nenhum provider de transcrição está conectado nesta rodada — isso cria só o registro pra estrutura, sem processar nada de verdade.</p>
+            <p className="mb-3 text-xs text-neutral-500">Nenhuma transcrição ainda. Nenhum provider de transcrição está conectado nesta rodada, isso cria só o registro pra estrutura, sem processar nada de verdade.</p>
             <button onClick={iniciar} className="rounded-md border border-neutral-800 px-3 py-1.5 text-xs text-teal-300 hover:bg-teal-500/10">Criar registro de transcrição</button>
           </div>
         ) : transcricao.status !== "pronto" ? (
-          <p className="py-6 text-center text-xs text-amber-400/80">Transcrição: {transcricao.status.replace("_", " ")} — precisa de processamento/provider conectado pra avançar.</p>
+          <p className="py-6 text-center text-xs text-amber-400/80">Transcrição: {transcricao.status.replace("_", " ")}, precisa de processamento/provider conectado pra avançar.</p>
         ) : segmentos.length === 0 ? (
           <p className="py-6 text-center text-xs text-neutral-600">Sem segmentos ainda.</p>
         ) : (
@@ -267,7 +267,7 @@ function AbaMomentos({ brutos, userId }: { brutos: Bruto[]; userId: string }) {
                 </select>
               </div>
               <div className="mt-1.5 flex items-center justify-between">
-                <span className="text-[10px] text-neutral-600">{formatarMs(m.start_ms)}–{formatarMs(m.end_ms)} {m.score != null && `· score interno ${m.score}`}</span>
+                <span className="text-[10px] text-neutral-600">{formatarMs(m.start_ms)}-{formatarMs(m.end_ms)} {m.score != null && `· score interno ${m.score}`}</span>
                 <select value={m.status} onChange={(e) => salvar(m.id, { status: e.target.value as Momento["status"] })} className="min-h-[28px] rounded border border-neutral-800 bg-neutral-950 px-1.5 text-[11px] text-neutral-400 outline-none focus:border-teal-500/40">
                   <option value="sugerido">Sugerido</option>
                   <option value="aprovado">Aprovado</option>
@@ -308,7 +308,7 @@ function AbaCortes({ projeto, brutos, userId }: { projeto: ProducaoProjeto; brut
         <button onClick={adicionar} disabled={brutos.length === 0} className="flex min-h-[36px] items-center gap-1.5 rounded-md border border-neutral-800 px-3 text-xs text-neutral-400 hover:text-teal-300 disabled:opacity-40"><Plus className="h-3.5 w-3.5" /> Corte</button>
       </div>
       {clips.length === 0 ? (
-        <EmptyState icone={Scissors} titulo="Nenhum corte ainda" descricao="Um momento aprovado pode virar um corte — ou crie manualmente." />
+        <EmptyState icone={Scissors} titulo="Nenhum corte ainda" descricao="Um momento aprovado pode virar um corte, ou crie manualmente." />
       ) : (
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {clips.map((c) => (
@@ -317,7 +317,7 @@ function AbaCortes({ projeto, brutos, userId }: { projeto: ProducaoProjeto; brut
                 <EditableField value={c.nome} onSave={(v) => salvar(c.id, { nome: v })} displayClassName="text-sm text-neutral-100" />
                 <button onClick={() => remover(c.id)} className="shrink-0 text-neutral-600 hover:text-[#F0997B]"><Trash2 className="h-3.5 w-3.5" /></button>
               </div>
-              <p className="mb-1.5 text-[11px] text-neutral-500">{formatarMs(c.start_ms)}–{formatarMs(c.end_ms)}</p>
+              <p className="mb-1.5 text-[11px] text-neutral-500">{formatarMs(c.start_ms)}-{formatarMs(c.end_ms)}</p>
               <div className="grid grid-cols-2 gap-1.5">
                 <select value={c.formato} onChange={(e) => salvar(c.id, { formato: e.target.value as FormatoClip })} className="min-h-[30px] rounded border border-neutral-800 bg-neutral-950 px-1.5 text-[11px] text-neutral-300 outline-none focus:border-teal-500/40">
                   {FORMATOS_CLIP.map((f) => <option key={f} value={f}>{f}</option>)}
@@ -326,7 +326,7 @@ function AbaCortes({ projeto, brutos, userId }: { projeto: ProducaoProjeto; brut
                   {STATUS_CLIP.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
-              {c.status !== "exported" && <p className="mt-1.5 text-[10px] text-neutral-600">Sem renderizador conectado — status é só controle manual por enquanto.</p>}
+              {c.status !== "exported" && <p className="mt-1.5 text-[10px] text-neutral-600">Sem renderizador conectado, status é só controle manual por enquanto.</p>}
             </Card>
           ))}
         </div>
@@ -369,14 +369,14 @@ function AbaReview({ projeto, userId }: { projeto: ProducaoProjeto; userId: stri
 
   return (
     <div>
-      <p className="mb-3 text-xs text-neutral-500">{projeto.titulo} — {clips.length} corte(s) encontrados</p>
+      <p className="mb-3 text-xs text-neutral-500">{projeto.titulo} - {clips.length} corte(s) encontrados</p>
       <div className="space-y-2">
         {clips.map((c) => (
           <Card key={c.id} className="p-3">
             <div className="flex items-center justify-between gap-2">
               <div>
                 <p className="text-sm text-neutral-100">{c.nome}</p>
-                <p className="text-[11px] text-neutral-500">{formatarMs(c.start_ms)}–{formatarMs(c.end_ms)} · {c.formato} · status: {c.status}</p>
+                <p className="text-[11px] text-neutral-500">{formatarMs(c.start_ms)}-{formatarMs(c.end_ms)} · {c.formato} · status: {c.status}</p>
               </div>
               <div className="flex shrink-0 gap-1">
                 <button onClick={() => mudarStatus(c.id, "approved")} title="Aprovar" className="flex h-8 w-8 items-center justify-center rounded-md text-neutral-500 hover:bg-teal-500/10 hover:text-teal-400"><CheckCircle2 className="h-4 w-4" /></button>
@@ -435,7 +435,7 @@ function AbaPublicacao({ projeto, userId }: { projeto: ProducaoProjeto; userId: 
         <button onClick={adicionar} className="flex min-h-[36px] items-center gap-1.5 rounded-md border border-neutral-800 px-3 text-xs text-neutral-400 hover:text-teal-300"><Plus className="h-3.5 w-3.5" /> Publicação</button>
       </div>
       {publicacoes.length === 0 ? (
-        <EmptyState icone={Send} titulo="Nenhuma publicação registrada" descricao="Registre manualmente — publicação automática não faz parte desta rodada." />
+        <EmptyState icone={Send} titulo="Nenhuma publicação registrada" descricao="Registre manualmente: publicação automática não faz parte desta rodada." />
       ) : (
         <div className="space-y-1.5">
           {publicacoes.map((p) => (
@@ -495,7 +495,7 @@ function AbaMetricas({ projeto, userId }: { projeto: ProducaoProjeto; userId: st
           {(metricasPorPub[p.id] ?? []).length > 0 && (
             <div className="space-y-1 text-[11px] text-neutral-500">
               {(metricasPorPub[p.id] ?? []).map((m) => (
-                <p key={m.id}>{new Date(m.captured_at).toLocaleDateString("pt-BR")}: {m.views ?? "—"} views · {m.likes ?? "—"} likes · {m.comments ?? "—"} comentários</p>
+                <p key={m.id}>{new Date(m.captured_at).toLocaleDateString("pt-BR")}: {m.views ?? "-"} views · {m.likes ?? "-"} likes · {m.comments ?? "-"} comentários</p>
               ))}
             </div>
           )}

@@ -55,7 +55,7 @@ export default function EditingDnaPage() {
 
   return (
     <div>
-      <PageHeader titulo="Editing DNA" descricao="Regras de edição reutilizáveis — como cada linha de conteúdo deve ser cortada, legendada e ritmada" acao={
+      <PageHeader titulo="Editing DNA" descricao="Regras de edição reutilizáveis, como cada linha de conteúdo deve ser cortada, legendada e ritmada" acao={
         <button onClick={novo} className="flex min-h-[40px] items-center gap-2 rounded-md bg-teal-500 px-4 text-sm font-medium text-neutral-950 hover:opacity-90">
           <Plus className="h-4 w-4" /> Novo DNA
         </button>
@@ -227,7 +227,7 @@ function DnaDetalhe({ userId, dna, onVoltar, onSalvar, onExcluir }: {
           </div>
         )}
         {referencias.length === 0 ? (
-          <p className="text-xs text-neutral-600">Nenhuma referência associada — nada é duplicado, só um vínculo.</p>
+          <p className="text-xs text-neutral-600">Nenhuma referência associada, nada é duplicado, só um vínculo.</p>
         ) : (
           <div className="flex flex-wrap gap-1.5">
             {referencias.map((r) => (

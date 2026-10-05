@@ -35,7 +35,7 @@ export async function enviarArquivo(pasta: string, userId: string, arquivo: File
   // nao aceita limite/janela como parametro, fica fixo no servidor.
   const { data: permitido, error: erroLimite } = await supabase.rpc("checar_rate_limit_upload");
   if (!erroLimite && permitido === false) {
-    throw new Error("Muitos uploads em pouco tempo — tenta de novo em instantes");
+    throw new Error("Muitos uploads em pouco tempo, tenta de novo em instantes");
   }
 
   const extensao = arquivo.name.split(".").pop();

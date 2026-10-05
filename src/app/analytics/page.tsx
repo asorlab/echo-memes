@@ -45,7 +45,7 @@ export default function AnalyticsPage() {
 
   return (
     <div>
-      <PageHeader titulo="Analytics" descricao="Publicações e métricas registradas manualmente — sem importação automática" />
+      <PageHeader titulo="Analytics" descricao="Publicações e métricas registradas manualmente, sem importação automática" />
 
       {carregando ? (
         <p className="py-10 text-center text-sm text-neutral-600">Carregando...</p>
@@ -72,10 +72,10 @@ export default function AnalyticsPage() {
                     {publicacoes.map(({ publicacao, ultimaMetrica }) => (
                       <tr key={publicacao.id} className="border-t border-neutral-900">
                         <td className="py-1.5 pr-3 text-neutral-300">{publicacao.plataforma}</td>
-                        <td className="py-1.5 pr-3 text-neutral-400">{ultimaMetrica?.views ?? "—"}</td>
-                        <td className="py-1.5 pr-3 text-neutral-400">{ultimaMetrica?.likes ?? "—"}</td>
-                        <td className="py-1.5 pr-3 text-neutral-400">{ultimaMetrica?.comments ?? "—"}</td>
-                        <td className="py-1.5 pr-3 text-neutral-400">{ultimaMetrica?.shares ?? "—"}</td>
+                        <td className="py-1.5 pr-3 text-neutral-400">{ultimaMetrica?.views ?? "-"}</td>
+                        <td className="py-1.5 pr-3 text-neutral-400">{ultimaMetrica?.likes ?? "-"}</td>
+                        <td className="py-1.5 pr-3 text-neutral-400">{ultimaMetrica?.comments ?? "-"}</td>
+                        <td className="py-1.5 pr-3 text-neutral-400">{ultimaMetrica?.shares ?? "-"}</td>
                         <td className="py-1.5 text-neutral-500">{ultimaMetrica ? new Date(ultimaMetrica.captured_at).toLocaleDateString("pt-BR") : "sem dados"}</td>
                       </tr>
                     ))}
@@ -84,7 +84,7 @@ export default function AnalyticsPage() {
               </div>
             </Card>
           ))}
-          <p className="text-[11px] text-neutral-600">Nesta amostra — nenhuma conclusão de causa aqui, só os números registrados. Sem importação automática de métricas nesta rodada.</p>
+          <p className="text-[11px] text-neutral-600">Nesta amostra: nenhuma conclusão de causa aqui, só os números registrados. Sem importação automática de métricas nesta rodada.</p>
         </div>
       )}
     </div>

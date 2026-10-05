@@ -96,7 +96,7 @@ export default function ContasPage() {
         analisado.tipo,
         analisado.tipo === "hashtag" ? limiteHashtag : null,
       );
-      toast("Conta adicionada — sincronização entra na fila");
+      toast("Conta adicionada: sincronização entra na fila");
       setNovoLink("");
       setLimiteHashtag(50);
       setAdicionarAberto(false);
@@ -131,7 +131,7 @@ export default function ContasPage() {
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold text-neutral-100">Contas</h1>
-          <p className="text-xs text-neutral-600">Perfis que você acompanha — sincronize pra trazer conteúdo novo pra Memes.</p>
+          <p className="text-xs text-neutral-600">Perfis que você acompanha, sincronize pra trazer conteúdo novo pra Memes.</p>
         </div>
         <div className="relative">
           <button onClick={() => setAdicionarAberto((v) => !v)} className="flex min-h-[36px] items-center gap-1.5 rounded-md bg-teal-500 px-3 text-xs font-medium text-neutral-950 hover:opacity-90">
@@ -174,7 +174,7 @@ export default function ContasPage() {
                   <div className="mt-2 rounded-md border border-[#F0997B]/30 bg-[#F0997B]/5 p-2">
                     <p className="text-[11px] text-[#F0997B]">Descoberta automática ainda não tem um provedor configurado</p>
                     <p className="mt-1 text-[10px] leading-relaxed text-neutral-500">
-                      Você pode adicionar a fonte agora — ela fica pronta na sua lista — mas o TikTok mudou a página de hashtag e o método usado hoje (yt-dlp) não consegue mais ler essa página. Ao sincronizar, a execução vai falhar com esse motivo até um provedor de descoberta ser configurado. Perfil (@usuário) continua funcionando normalmente.
+                      Você pode adicionar a fonte agora, ela fica pronta na sua lista, mas o TikTok mudou a página de hashtag e o método usado hoje (yt-dlp) não consegue mais ler essa página. Ao sincronizar, a execução vai falhar com esse motivo até um provedor de descoberta ser configurado. Perfil (@usuário) continua funcionando normalmente.
                     </p>
                   </div>
                 </div>
@@ -188,7 +188,7 @@ export default function ContasPage() {
                 {adicionando ? "Adicionando..." : "Adicionar"}
               </button>
               <p className="mt-2 text-[10px] leading-relaxed text-neutral-600">
-                X hoje só importa post individual (colando o link do post direto em Memes) — perfil inteiro do X ainda não está disponível.
+                X hoje só importa post individual (colando o link do post direto em Memes), perfil inteiro do X ainda não está disponível.
               </p>
             </div>
           )}

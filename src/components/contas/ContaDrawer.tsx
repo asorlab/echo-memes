@@ -61,7 +61,7 @@ export default function ContaDrawer({ fonte, onFechar, onMudou }: { fonte: Fonte
     setSincronizando(true);
     try {
       await sincronizarFonte(user.id, fonte.id, numero);
-      toast(`Importando até ${numero} vídeo(s) novo(s) — acompanhe abaixo`);
+      toast(`Importando até ${numero} vídeo(s) novo(s), acompanhe abaixo`);
       onMudou();
     } catch {
       toast("Erro ao sincronizar");

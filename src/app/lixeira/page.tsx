@@ -49,7 +49,7 @@ export default function LixeiraPage() {
       toast("Excluído definitivamente");
       await carregar();
     } catch {
-      toast("Erro ao remover o arquivo — o item continua na lixeira");
+      toast("Erro ao remover o arquivo, o item continua na lixeira");
     } finally {
       setProcessandoId(null);
     }
@@ -79,7 +79,7 @@ export default function LixeiraPage() {
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold text-neutral-100">Lixeira</h1>
-          <p className="text-xs text-neutral-600">Itens excluídos das bibliotecas — restaura ou remove de vez.</p>
+          <p className="text-xs text-neutral-600">Itens excluídos das bibliotecas, restaura ou remove de vez.</p>
         </div>
         <button
           onClick={esvaziarLixeira}

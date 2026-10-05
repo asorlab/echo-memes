@@ -248,7 +248,7 @@ export default function MemesPage() {
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
     } catch {
-      toast("Erro ao baixar — abrindo em nova aba");
+      toast("Erro ao baixar, abrindo em nova aba");
       window.open(urlParaBaixar, "_blank");
     }
   }
@@ -286,7 +286,7 @@ export default function MemesPage() {
       });
       if (error) { toast("Erro ao salvar o meme"); return; }
 
-      toast("Meme importado — falta só classificar");
+      toast("Meme importado: falta só classificar");
       setLinkImportar("");
       setModalAberto(false);
       carregar();
@@ -326,7 +326,7 @@ export default function MemesPage() {
     <div>
       <PageHeader
         titulo="Memes"
-        descricao="Biblioteca de memes pensada pro momento da edição — classifica, encontra, corta, baixa."
+        descricao="Biblioteca de memes pensada pro momento da edição, classifica, encontra, corta, baixa."
         acao={
           <button
             onClick={() => { setAbaAdicionar("tiktok"); setModalAberto(true); }}

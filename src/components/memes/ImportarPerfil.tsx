@@ -76,7 +76,7 @@ export default function ImportarPerfil() {
       </button>
 
       {mensagem && <p className="text-[11px] text-neutral-500">{mensagem}</p>}
-      <p className="text-[10px] text-neutral-600">Isso vira uma Conta acompanhada — dá pra sincronizar de novo depois, só trazendo conteúdo novo.</p>
+      <p className="text-[10px] text-neutral-600">Isso vira uma Conta acompanhada, dá pra sincronizar de novo depois, só trazendo conteúdo novo.</p>
     </div>
   );
 }

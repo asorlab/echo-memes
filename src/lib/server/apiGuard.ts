@@ -36,7 +36,7 @@ async function usuarioDoToken(token: string): Promise<string | null> {
 async function dentroDoLimite(chave: string, limite: number, janelaSeg: number): Promise<boolean> {
   const admin = clienteAdmin();
   if (!admin) {
-    console.error("SUPABASE_SECRET_KEY nao configurada — rate limit desativado nesta chamada");
+    console.error("SUPABASE_SECRET_KEY nao configurada, rate limit desativado nesta chamada");
     return true;
   }
   const { data, error } = await admin.rpc("checar_rate_limit", {
@@ -72,7 +72,7 @@ export async function protegerRota(request: NextRequest, opcoes: OpcoesGuarda): 
   const chave = `${userId}:${new URL(request.url).pathname}`;
   const permitido = await dentroDoLimite(chave, opcoes.limite, opcoes.janelaSeg);
   if (!permitido) {
-    return NextResponse.json({ erro: "Muitas requisicoes — tenta de novo em instantes" }, { status: 429 });
+    return NextResponse.json({ erro: "Muitas requisicoes: tenta de novo em instantes" }, { status: 429 });
   }
 
   return { userId };

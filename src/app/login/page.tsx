@@ -51,7 +51,7 @@ function FormularioLogin() {
       await confirmarDesafioLogin(desafioMfa.factorId, desafioMfa.challengeId, codigoMfa.trim());
       router.replace(proximaRota);
     } catch {
-      setErroMfa("Código incorreto — confira o app autenticador e tenta de novo");
+      setErroMfa("Código incorreto: confira o app autenticador e tenta de novo");
       setCodigoMfa("");
     } finally {
       setVerificandoMfa(false);
