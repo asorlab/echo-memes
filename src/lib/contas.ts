@@ -109,6 +109,7 @@ export async function listarFontes(userId: string): Promise<Fonte[]> {
     .from("import_sources")
     .select("*")
     .eq("user_id", userId)
+    .neq("source_type", "radar") // contas criadas pelo Radar (so analise) nao aparecem aqui
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []).map(mapFonte);
@@ -119,6 +120,7 @@ export async function listarExecucoes(sourceId: string): Promise<Execucao[]> {
     .from("import_runs")
     .select("*")
     .eq("source_id", sourceId)
+    .not("status", "like", "radar_%") // sincronizacoes do Radar tem historico proprio la
     .order("created_at", { ascending: false })
     .limit(20);
   if (error) throw error;
@@ -130,6 +132,7 @@ export async function listarExecucoesRecentes(userId: string): Promise<Execucao[
     .from("import_runs")
     .select("*")
     .eq("user_id", userId)
+    .not("status", "like", "radar_%")
     .order("created_at", { ascending: false })
     .limit(10);
   if (error) throw error;

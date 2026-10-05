@@ -13,9 +13,9 @@ function extrairUsername(url: string): string | null {
   }
 }
 
-export default function ImportarPerfil() {
+export default function ImportarPerfil({ urlInicial = "" }: { urlInicial?: string }) {
   const { user } = useUser();
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(urlInicial);
   const [carregando, setCarregando] = useState(false);
   const [mensagem, setMensagem] = useState("");
 

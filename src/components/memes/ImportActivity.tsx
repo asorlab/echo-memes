@@ -73,6 +73,7 @@ export default function ImportActivity({ userId, onImportCompleted }: ImportActi
       .from("import_runs")
       .select("id, source_id, status, total_found, total_new, total_downloaded, total_skipped, total_failed, error_message, created_at, updated_at, import_sources(username, platform)")
       .eq("user_id", userId)
+      .not("status", "like", "radar_%")
       .order("created_at", { ascending: false })
       .limit(20);
 

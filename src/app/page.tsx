@@ -146,6 +146,12 @@ export default function MemesPage() {
   }, [user, toast]);
 
   useEffect(() => { carregar(); }, [carregar]);
+  // "Enviar para o Assets" vindo do Radar: abre o importador de conta ja com o link da conta (a pessoa confirma; nada e importado sozinho)
+  const [urlDoRadar, setUrlDoRadar] = useState("");
+  useEffect(() => {
+    const alvo = new URLSearchParams(window.location.search).get("importar");
+    if (alvo && /^https:\/\/(www\.)?tiktok\.com\/@[\w.]+\/?$/i.test(alvo)) { setUrlDoRadar(alvo); setAbaAdicionar("tiktok"); setModalAberto(true); }
+  }, []);
 
   async function adicionar() {
     if (!user) return;
@@ -350,7 +356,7 @@ export default function MemesPage() {
           </button>
         </div>
 
-        {abaAdicionar === "tiktok" && <ImportarPerfil />}
+        {abaAdicionar === "tiktok" && <ImportarPerfil urlInicial={urlDoRadar} />}
 
         {abaAdicionar === "x" && (
           <form onSubmit={importarDoX} className="flex flex-col gap-2">
