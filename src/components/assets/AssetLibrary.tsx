@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Plus, Trash2, Search, Download, Star, X, History, ExternalLink, Link2 } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useUser } from "@/lib/useUser";
@@ -40,9 +40,14 @@ export interface AssetLibraryConfig {
   // toda leitura por esse campo/valor e ja preenche ele em todo insert, pra
   // nao vazar nem deixar criar item de outro tipo por engano.
   filtroFixo?: { campo: string; valor: string };
+  // Segunda fileira de filtros (ex.: marca em Inspiracoes), com as opcoes
+  // do campo de mesmo nome em camposDrawer.
+  filtroSecundario?: string;
+  // Acoes extras no fim da gaveta (ex.: "Virar ideia no ECHO OS").
+  acoesDrawer?: (item: Registro, recarregar: () => void) => ReactNode;
 }
 
-interface Registro {
+export interface Registro {
   id: string;
   titulo?: string;
   favorito?: boolean;
@@ -71,6 +76,7 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
   const [carregando, setCarregando] = useState(true);
   const [busca, setBusca] = useState("");
   const [filtroAtivo, setFiltroAtivo] = useState<string | null>(null);
+  const [filtro2Ativo, setFiltro2Ativo] = useState<string | null>(null);
   const [soFavoritos, setSoFavoritos] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [drawerId, setDrawerId] = useState<string | null>(null);
@@ -100,6 +106,15 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
   }, [user, config.tabela, config.tabelaUsos, config.filtroFixo, toast]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  // ?abrir=<id> abre a gaveta do item (link que vai junto quando o item vira
+  // ideia no ECHO OS, pra voltar direto nele).
+  useEffect(() => {
+    try {
+      const id = new URLSearchParams(window.location.search).get("abrir");
+      if (id) setDrawerId(id);
+    } catch { /* ignora */ }
+  }, []);
 
   async function adicionarArquivos(arquivos: FileList) {
     if (!user) return;
@@ -192,8 +207,11 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
 
   const opcoesFiltro = config.filtroPrincipal ? config.camposDrawer.find((c) => c.key === config.filtroPrincipal)?.opcoes ?? [] : [];
 
+  const opcoesFiltro2 = config.filtroSecundario ? config.camposDrawer.find((c) => c.key === config.filtroSecundario)?.opcoes ?? [] : [];
+
   const filtrados = itens.filter((it) => {
     if (filtroAtivo && config.filtroPrincipal && it[config.filtroPrincipal] !== filtroAtivo) return false;
+    if (filtro2Ativo && config.filtroSecundario && it[config.filtroSecundario] !== filtro2Ativo) return false;
     if (soFavoritos && !it.favorito) return false;
     if (!busca.trim()) return true;
     const alvo = busca.trim().toLowerCase();
@@ -321,6 +339,15 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
         <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por título ou tag…" className="w-full bg-transparent text-sm text-neutral-200 placeholder-neutral-600 outline-none" />
       </div>
 
+      {opcoesFiltro2.length > 0 && (
+        <div className="mb-2 flex flex-wrap items-center gap-1.5">
+          <button onClick={() => setFiltro2Ativo(null)} className={`rounded-full border px-2.5 py-1 text-[11px] font-mono ${!filtro2Ativo ? "border-teal-500/50 bg-teal-500/10 text-teal-300" : "border-neutral-800 text-neutral-500 hover:text-neutral-300"}`}>Todas as marcas</button>
+          {opcoesFiltro2.map((o) => (
+            <button key={o.id} onClick={() => setFiltro2Ativo(o.id === filtro2Ativo ? null : o.id)} className={`rounded-full border px-2.5 py-1 text-[11px] font-mono ${filtro2Ativo === o.id ? "border-teal-500/50 bg-teal-500/10 text-teal-300" : "border-neutral-800 text-neutral-500 hover:text-neutral-300"}`}>{o.rotulo}</button>
+          ))}
+        </div>
+      )}
+
       {(opcoesFiltro.length > 0 || true) && (
         <div className="mb-4 flex flex-wrap items-center gap-1.5">
           {opcoesFiltro.length > 0 && (
@@ -362,6 +389,9 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
                 <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-neutral-500">
                   {config.filtroPrincipal && it[config.filtroPrincipal] != null && (
                     <span className="rounded-full bg-teal-500/10 px-1.5 py-0.5 text-teal-300">{opcoesFiltro.find((o) => o.id === it[config.filtroPrincipal!])?.rotulo}</span>
+                  )}
+                  {config.filtroSecundario && it[config.filtroSecundario] != null && (
+                    <span className="rounded-full border border-neutral-800 px-1.5 py-0.5 text-neutral-400">{opcoesFiltro2.find((o) => o.id === it[config.filtroSecundario!])?.rotulo}</span>
                   )}
                   {config.tabelaUsos && (
                     <span className="ml-auto flex items-center gap-0.5"><History className="h-2.5 w-2.5" /> {usosDoItem.length === 0 ? "nunca usado" : `${usosDoItem.length}x`}</span>
@@ -417,6 +447,8 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
                   {renderCampo(campo, drawerItem[campo.key], (v) => atualizar(drawerItem.id, { [campo.key]: v }))}
                 </div>
               ))}
+
+              {config.acoesDrawer?.(drawerItem, carregar)}
 
               {config.tabelaUsos && (
                 <div>

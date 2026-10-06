@@ -2,7 +2,8 @@ export type Categoria = "iveasor" | "asor" | "aivil" | "geral";
 
 export type Emocao = "vergonha" | "choque" | "deboche" | "deu_ruim" | "vitoria" | "cansaco" | "ironia";
 export type Momento = "gancho" | "transicao" | "punchline" | "fecho";
-export type Formato = "vlog" | "grwm" | "gaming" | "lifestyle" | "cover" | "asmr" | "short_form";
+export type Formato =
+  | "lifestyle" | "fashion" | "vlog" | "grwm" | "gaming" | "cover" | "asmr" | "bastidores" | "cultura_internet" | "short_form";
 export type StatusReferencia = "quero_testar" | "testado";
 export type FormaUso = "corte_seco" | "overlay" | "reaction" | "green_screen" | "audio" | "insert";
 export type AudioPref = "original" | "mudo" | "so_fala";

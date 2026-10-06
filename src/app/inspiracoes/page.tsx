@@ -1,10 +1,12 @@
 "use client";
 import { Lightbulb } from "lucide-react";
 import AssetLibrary, { type AssetLibraryConfig } from "@/components/assets/AssetLibrary";
+import VirarIdeia from "@/components/assets/VirarIdeia";
+import { FORMATOS_CONTEUDO } from "@/lib/formatos";
 
-const FORMATOS_CONTEUDO = [
-  { id: "vlog", rotulo: "Vlog" }, { id: "grwm", rotulo: "GRWM" }, { id: "gaming", rotulo: "Gaming" },
-  { id: "lifestyle", rotulo: "Lifestyle" }, { id: "cover", rotulo: "Cover" }, { id: "asmr", rotulo: "ASMR" }, { id: "short_form", rotulo: "Short-form" },
+const MARCAS = [
+  { id: "iveasor", rotulo: "IveAsor" }, { id: "asor", rotulo: "ASOR.lab" },
+  { id: "aivil", rotulo: "AIVIL" }, { id: "geral", rotulo: "Geral" },
 ];
 
 const config: AssetLibraryConfig = {
@@ -15,7 +17,9 @@ const config: AssetLibraryConfig = {
   aceitaArquivo: "image/*,video/*",
   tituloPadrao: "Nova inspiração",
   filtroPrincipal: "tipo_inspiracao",
+  filtroSecundario: "marca",
   camposDrawer: [
+    { key: "marca", label: "Marca", tipo: "chips", opcoes: MARCAS },
     {
       key: "categoria", label: "Formato (o que salvei)", tipo: "select",
       opcoes: [
@@ -42,6 +46,7 @@ const config: AssetLibraryConfig = {
     { key: "plataforma", label: "Plataforma", tipo: "text", placeholder: "TikTok, Instagram..." },
     { key: "tags", label: "Tags", tipo: "tags", placeholder: "tags: estetica, roteiro..." },
   ],
+  acoesDrawer: (item, recarregar) => <VirarIdeia item={item} recarregar={recarregar} />,
 };
 
 export default function InspiracoesPage() {

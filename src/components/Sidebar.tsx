@@ -4,9 +4,16 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Radio, Sparkles, LogOut, X, ChevronDown, AudioLines, ImageIcon, Compass, Lightbulb, Trash2, Rss, FolderKanban, Users,
-  Clapperboard, BarChart3, Dna, Type, Palette, BadgeCheck,
+  Clapperboard, BarChart3, Dna, Type, Palette, BadgeCheck, ArrowUpRight,
 } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import { ECHO_OS_URL } from "@/lib/sistemas";
+
+// Atalhos pros outros sistemas do ECHO (mesmo login, outro endereco).
+const OUTROS_SISTEMAS = [
+  { nome: "ECHO // OS", href: ECHO_OS_URL },
+  { nome: "ECHO // LIFE", href: `${ECHO_OS_URL}/life` },
+];
 
 interface ItemNav {
   id: string;
@@ -166,6 +173,20 @@ export default function Sidebar({ aberta = false, fechar = () => {} }: SidebarPr
         </nav>
 
         <div className="space-y-0.5 border-t border-neutral-800 px-3 py-3">
+          {OUTROS_SISTEMAS.map((s) => (
+            <a
+              key={s.nome}
+              href={s.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={fechar}
+              title={`${s.nome} (abre em nova aba)`}
+              className="flex min-h-[40px] w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-neutral-400 hover:bg-neutral-900 hover:text-teal-300"
+            >
+              <ArrowUpRight className="h-4 w-4" />
+              <span className="font-mono text-[13px]">{s.nome}</span>
+            </a>
+          ))}
           <button
             onClick={sair}
             className="flex min-h-[44px] w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"

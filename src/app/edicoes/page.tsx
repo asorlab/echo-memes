@@ -7,6 +7,7 @@ import { useUser } from "@/lib/useUser";
 import { useToast } from "@/components/ToastProvider";
 import EditableField from "@/components/ui/EditableField";
 import { enviarArquivo, resolverUrl, urlsAssinadas } from "@/lib/storage";
+import { FORMATOS_CONTEUDO } from "@/lib/formatos";
 
 interface Edicao {
   id: string; titulo: string; arquivo_url: string | null; link_origem: string | null;
@@ -20,10 +21,6 @@ const CARACTERISTICAS = [
   { id: "legenda", rotulo: "Legenda" }, { id: "zoom", rotulo: "Zoom" }, { id: "transicao", rotulo: "Transição" },
   { id: "sfx", rotulo: "SFX" }, { id: "color", rotulo: "Color" }, { id: "b_roll", rotulo: "B-roll" },
   { id: "enquadramento", rotulo: "Enquadramento" }, { id: "storytelling", rotulo: "Storytelling" }, { id: "timing_comico", rotulo: "Timing cômico" },
-];
-const FORMATOS_CONTEUDO = [
-  { id: "vlog", rotulo: "Vlog" }, { id: "grwm", rotulo: "GRWM" }, { id: "gaming", rotulo: "Gaming" },
-  { id: "lifestyle", rotulo: "Lifestyle" }, { id: "cover", rotulo: "Cover" }, { id: "asmr", rotulo: "ASMR" }, { id: "short_form", rotulo: "Short-form" },
 ];
 const STATUS_OPCOES = [{ id: "quero_testar", rotulo: "Quero testar" }, { id: "testado", rotulo: "Testado" }];
 interface Timestamp { id: string; edicao_id: string; inicio_seg: number; fim_seg: number | null; nota: string; }

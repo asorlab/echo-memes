@@ -9,6 +9,7 @@ import EditableField from "@/components/ui/EditableField";
 import type {
   Categoria, Emocao, Momento, Formato, FormaUso, AudioPref, Intensidade, Status, Risco, Meme, MemeUso,
 } from "@/lib/types";
+import { FORMATOS_CONTEUDO } from "@/lib/formatos";
 
 const CATEGORIAS: { id: Categoria; rotulo: string }[] = [
   { id: "iveasor", rotulo: "IveAsor" }, { id: "asor", rotulo: "ASOR.lab" },
@@ -21,10 +22,7 @@ const EMOCOES: { id: Emocao; rotulo: string }[] = [
 const MOMENTOS: { id: Momento; rotulo: string }[] = [
   { id: "gancho", rotulo: "Gancho" }, { id: "transicao", rotulo: "Transição" }, { id: "punchline", rotulo: "Punchline" }, { id: "fecho", rotulo: "Fecho" },
 ];
-const FORMATOS: { id: Formato; rotulo: string }[] = [
-  { id: "vlog", rotulo: "Vlog" }, { id: "grwm", rotulo: "GRWM" }, { id: "gaming", rotulo: "Gaming" },
-  { id: "lifestyle", rotulo: "Lifestyle" }, { id: "cover", rotulo: "Cover" }, { id: "asmr", rotulo: "ASMR" }, { id: "short_form", rotulo: "Short-form" },
-];
+const FORMATOS = FORMATOS_CONTEUDO;
 const FORMAS_USO: { id: FormaUso; rotulo: string }[] = [
   { id: "corte_seco", rotulo: "Corte seco" }, { id: "overlay", rotulo: "Overlay" }, { id: "reaction", rotulo: "Reaction" },
   { id: "green_screen", rotulo: "Green screen" }, { id: "audio", rotulo: "Áudio" }, { id: "insert", rotulo: "Insert" },
