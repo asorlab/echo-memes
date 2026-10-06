@@ -21,10 +21,12 @@ const CSP = [
   "default-src 'self'",
   "img-src 'self' data: blob: https:",
   "media-src 'self' blob: https:",
-  "script-src 'self' 'unsafe-inline'",
+  "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",
   "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+  // Turnstile (Cloudflare) do login roda num iframe proprio.
+  "frame-src https://challenges.cloudflare.com",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

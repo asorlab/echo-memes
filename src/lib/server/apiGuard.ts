@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { podeUsarAssets } from "./acesso";
 
 // Guarda compartilhada pelas rotas de API privadas do ECHO // ASSETS —
 // mesmo padrao ja usado no echo-os-app (mesmo projeto Supabase). Exige
@@ -26,11 +27,13 @@ function extrairToken(request: NextRequest): string | null {
   return cabecalho.slice(7).trim() || null;
 }
 
-async function usuarioDoToken(token: string): Promise<string | null> {
+// Alem de sessao valida, a conta precisa ter acesso ao ASSETS (admin ou
+// app_metadata.espacos com "assets"), igual ao middleware das paginas.
+async function usuarioDoToken(token: string): Promise<{ id: string; permitido: boolean } | null> {
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const { data, error } = await supabase.auth.getUser(token);
   if (error || !data.user) return null;
-  return data.user.id;
+  return { id: data.user.id, permitido: podeUsarAssets(data.user) };
 }
 
 async function dentroDoLimite(chave: string, limite: number, janelaSeg: number): Promise<boolean> {
@@ -64,10 +67,14 @@ export function ehResposta(resultado: ResultadoGuarda): resultado is NextRespons
 
 export async function protegerRota(request: NextRequest, opcoes: OpcoesGuarda): Promise<ResultadoGuarda> {
   const token = extrairToken(request);
-  const userId = token ? await usuarioDoToken(token) : null;
-  if (!userId) {
+  const usuario = token ? await usuarioDoToken(token) : null;
+  if (!usuario) {
     return NextResponse.json({ erro: "Nao autenticado" }, { status: 401 });
   }
+  if (!usuario.permitido) {
+    return NextResponse.json({ erro: "Sem acesso" }, { status: 403 });
+  }
+  const userId = usuario.id;
 
   const chave = `${userId}:${new URL(request.url).pathname}`;
   const permitido = await dentroDoLimite(chave, opcoes.limite, opcoes.janelaSeg);

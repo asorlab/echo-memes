@@ -13,6 +13,7 @@ import PageHeader from "@/components/ui/PageHeader";
 import EmptyState from "@/components/ui/EmptyState";
 import EditableField from "@/components/ui/EditableField";
 import { extrairDuracaoAudio } from "@/lib/metadados";
+import { sugerirTipoAudio } from "@/lib/classificarAudio";
 import type { Audio, AudioUso, CategoriaSfx, Clima, Licenciamento, Momento, Risco, TipoAudio } from "@/lib/types";
 
 interface AudioRow {
@@ -101,18 +102,24 @@ export default function AudiosPage() {
     if (!user) return;
     setEnviando(true);
     try {
+      const rotulos: string[] = [];
       for (const arquivo of Array.from(arquivos)) {
         const [url, metadados] = await Promise.all([
           enviarArquivo("audios", user.id, arquivo),
           extrairDuracaoAudio(arquivo),
         ]);
         const titulo = arquivo.name.replace(/\.[^.]+$/, "").slice(0, 60) || "Novo áudio";
+        const sugestao = sugerirTipoAudio(arquivo.name, metadados?.duracao_seg, tipoAtivo);
         await supabaseBrowser().from("audios").insert({
-          user_id: user.id, titulo, arquivo_url: url, tipo: tipoAtivo ?? "musica",
+          user_id: user.id, titulo, arquivo_url: url, tipo: sugestao.tipo, categoria_sfx: sugestao.categoriaSfx,
+          licenciamento: "desconhecido",
           ...(metadados ?? {}),
         });
+        rotulos.push(TIPOS.find((t) => t.id === sugestao.tipo)?.rotulo ?? sugestao.tipo);
       }
-      toast(arquivos.length > 1 ? `${arquivos.length} áudios adicionados` : "Áudio adicionado");
+      toast(arquivos.length > 1
+        ? `${arquivos.length} áudios adicionados (${Array.from(new Set(rotulos)).join(", ")}). Confira o tipo de cada um.`
+        : `Áudio adicionado como ${rotulos[0]}. Se errei, troque no painel do item.`);
       carregar();
     } catch {
       toast("Erro ao enviar arquivo");
@@ -144,6 +151,13 @@ export default function AudiosPage() {
   async function registrarUso(audioId: string, contexto: string) {
     if (!user || !contexto.trim()) return;
     await supabaseBrowser().from("audios_usos").insert({ audio_id: audioId, user_id: user.id, contexto: contexto.trim() });
+    // Alerta de licenca: usar audio sem licenca confirmada pode derrubar ou desmonetizar o video.
+    const audio = itens.find((a) => a.id === audioId);
+    if (audio && audio.licenciamento !== "licenciado") {
+      toast(audio.licenciamento === "nao_licenciado"
+        ? "Atenção: este áudio está marcado como NÃO licenciado. O vídeo pode ser derrubado ou desmonetizado."
+        : "Atenção: a licença deste áudio é desconhecida. Confirme antes de publicar.");
+    }
     setNovoUso("");
     carregar();
   }
@@ -212,7 +226,11 @@ export default function AudiosPage() {
           <button key={t.id} onClick={() => setTipoAtivo(t.id === tipoAtivo ? null : t.id)} className={`rounded-full border px-2.5 py-1 text-[11px] font-mono ${tipoAtivo === t.id ? "border-teal-500/50 bg-teal-500/10 text-teal-300" : "border-neutral-800 text-neutral-500 hover:text-neutral-300"}`}>{t.rotulo}</button>
         ))}
       </div>
-      <p className="mb-2 text-[10px] text-neutral-600">Novos arquivos entram como &quot;{TIPOS.find((t) => t.id === tipoAtivo)?.rotulo ?? "Música"}&quot;. Escolha o tipo no filtro acima antes de enviar.</p>
+      <p className="mb-2 text-[11px] text-neutral-500">
+        {tipoAtivo
+          ? <>Arquivos enviados agora entram como <span className="text-teal-300">{TIPOS.find((t) => t.id === tipoAtivo)?.rotulo}</span>.</>
+          : <>O tipo é sugerido pelo nome do arquivo e pela duração (até 4 s vira SFX). Para forçar um tipo, escolha no filtro antes de enviar.</>}
+      </p>
 
       <div className="mb-4 flex flex-wrap items-center gap-1.5">
         <button onClick={() => setSoFavoritos((v) => !v)} className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-mono ${soFavoritos ? "border-amber-500/50 bg-amber-500/10 text-amber-300" : "border-neutral-800 text-neutral-500 hover:text-neutral-300"}`}>
