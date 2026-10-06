@@ -26,7 +26,7 @@ function ItemCard({ item, acoes }: { item: ItemProjeto; acoes: React.ReactNode }
     <Card className="flex items-center gap-2.5 p-2.5">
       {item.urlAssinada ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={item.urlAssinada} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />
+        <img src={item.urlAssinada} alt="" loading="lazy" decoding="async" className="h-10 w-10 shrink-0 rounded object-cover" />
       ) : (
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-neutral-800 text-[9px] text-neutral-500">{item.rotuloTabela[0]}</div>
       )}

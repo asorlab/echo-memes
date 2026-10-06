@@ -253,10 +253,10 @@ export default function VisuaisPage() {
                 </div>
                 {v.arquivoUrl && resolverUrl(v.arquivoUrl, urls) && (
                   ehVideo(v.arquivoUrl) ? (
-                    <video src={resolverUrl(v.arquivoUrl, urls)} muted playsInline className="mb-2 h-28 w-full rounded object-cover" />
+                    <video src={resolverUrl(v.arquivoUrl, urls)} muted playsInline preload="metadata" className="mb-2 h-28 w-full rounded object-cover" />
                   ) : (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={resolverUrl(v.arquivoUrl, urls)} alt="" className="mb-2 h-28 w-full rounded object-cover" />
+                    <img src={resolverUrl(v.arquivoUrl, urls)} alt="" loading="lazy" decoding="async" className="mb-2 h-28 w-full rounded object-cover" />
                   )
                 )}
                 <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-neutral-500">

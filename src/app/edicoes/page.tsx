@@ -239,10 +239,10 @@ export default function EdicoesPage() {
               <button key={e.id} onClick={() => setDrawerId(e.id)} className="group text-left">
                 <div className="relative mb-1.5 flex aspect-video items-center justify-center overflow-hidden rounded-md bg-neutral-900">
                   {ehVideo && resolverUrl(e.arquivo_url, urls) ? (
-                    <video src={resolverUrl(e.arquivo_url, urls)} muted playsInline className="h-full w-full object-cover" />
+                    <video src={resolverUrl(e.arquivo_url, urls)} muted playsInline preload="metadata" className="h-full w-full object-cover" />
                   ) : e.arquivo_url && resolverUrl(e.arquivo_url, urls) ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={resolverUrl(e.arquivo_url, urls)} alt="" className="h-full w-full object-cover" />
+                    <img src={resolverUrl(e.arquivo_url, urls)} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
                   ) : (
                     <Film className="h-5 w-5 text-neutral-700" />
                   )}

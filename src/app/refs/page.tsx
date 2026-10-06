@@ -17,7 +17,7 @@ const ICONE_PLATAFORMA: Record<string, typeof Music2> = { tiktok: Music2, youtub
 function Avatar({ url, nome }: { url: string | null; nome: string }) {
   if (url) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={url} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" />;
+    return <img src={url} alt="" loading="lazy" decoding="async" className="h-10 w-10 shrink-0 rounded-full object-cover" />;
   }
   return (
     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-xs text-neutral-400">

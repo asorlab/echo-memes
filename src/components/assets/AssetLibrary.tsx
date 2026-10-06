@@ -353,10 +353,10 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
                   {it.favorito && <Star className="h-3.5 w-3.5 shrink-0 text-amber-400" fill="currentColor" />}
                 </div>
                 {url && ehAudio(url) && <audio src={url} controls className="mb-2 h-8 w-full" onClick={(e) => e.stopPropagation()} />}
-                {url && ehVideo(url) && <video src={url} muted playsInline className="mb-2 h-28 w-full rounded object-cover" />}
+                {url && ehVideo(url) && <video src={url} muted playsInline preload="metadata" className="mb-2 h-28 w-full rounded object-cover" />}
                 {url && !ehAudio(url) && !ehVideo(url) && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={url} alt="" className="mb-2 h-28 w-full rounded object-cover" />
+                  <img src={url} alt="" loading="lazy" decoding="async" className="mb-2 h-28 w-full rounded object-cover" />
                 )}
                 {!url && it.link_origem && <p className="mb-2 truncate text-[10px] text-sky-400">{it.link_origem}</p>}
                 <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-neutral-500">

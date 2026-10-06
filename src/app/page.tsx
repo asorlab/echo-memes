@@ -463,10 +463,10 @@ export default function MemesPage() {
                 >
                   {m.imagemUrl && resolverUrl(m.imagemUrl, urls) && !imagensQuebradas.has(m.imagemUrl) ? (
                     ehVideo(m.imagemUrl) ? (
-                      <video src={resolverUrl(m.imagemUrl, urls)} className="h-full w-full object-cover" muted playsInline onError={() => setImagensQuebradas((atual) => new Set(atual).add(m.imagemUrl!))} />
+                      <video src={resolverUrl(m.imagemUrl, urls)} className="h-full w-full object-cover" muted playsInline preload="metadata" onError={() => setImagensQuebradas((atual) => new Set(atual).add(m.imagemUrl!))} />
                     ) : (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={resolverUrl(m.imagemUrl, urls)} alt="" className="h-full w-full object-cover" onError={() => setImagensQuebradas((atual) => new Set(atual).add(m.imagemUrl!))} />
+                      <img src={resolverUrl(m.imagemUrl, urls)} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" onError={() => setImagensQuebradas((atual) => new Set(atual).add(m.imagemUrl!))} />
                     )
                   ) : (
                     <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-neutral-700">
