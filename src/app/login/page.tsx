@@ -52,6 +52,9 @@ function FormularioLogin() {
 
   const [captchaPronto, setCaptchaPronto] = useState(false);
   const [captchaToken, setCaptchaToken] = useState("");
+  // Verificacao do Cloudflare que nao carregou (dominio nao liberado, rede do celular, bloqueador): o login nao trava.
+  // O servidor continua com o bloqueio por tentativas, e o Supabase recusa sozinho se o CAPTCHA dele estiver ligado.
+  const [captchaFalhou, setCaptchaFalhou] = useState(false);
   const captchaWidgetId = useRef<string | undefined>(undefined);
   const captchaContainerRef = useRef<HTMLDivElement>(null);
 
@@ -93,6 +96,7 @@ function FormularioLogin() {
       sitekey: TURNSTILE_SITE_KEY,
       callback: (token: string) => setCaptchaToken(token),
       "expired-callback": () => setCaptchaToken(""),
+      "error-callback": () => { setCaptchaFalhou(true); return true; },
       theme: "dark",
     });
   }
@@ -152,7 +156,7 @@ function FormularioLogin() {
     e.preventDefault();
     setErro("");
     setAviso("");
-    if (TURNSTILE_SITE_KEY && modo !== "nova-senha" && !captchaToken) {
+    if (TURNSTILE_SITE_KEY && !captchaFalhou && modo !== "nova-senha" && !captchaToken) {
       setErro("Confirme que você não é um robô.");
       return;
     }
@@ -295,7 +299,7 @@ function FormularioLogin() {
       </div>
 
       {TURNSTILE_SITE_KEY && (
-        <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="afterInteractive" onLoad={() => setCaptchaPronto(true)} />
+        <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="afterInteractive" onLoad={() => setCaptchaPronto(true)} onError={() => setCaptchaFalhou(true)} />
       )}
     </main>
   );
