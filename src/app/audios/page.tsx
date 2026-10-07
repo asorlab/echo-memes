@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Plus, Trash2, Music, Search, Download, Star, X, History, ExternalLink, ShieldAlert, ShieldCheck, ShieldQuestion,
+  Plus, Trash2, Music, Search, Download, Star, X, History, ExternalLink, ShieldAlert, ShieldCheck, ShieldQuestion, Radio, Link2,
 } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useUser } from "@/lib/useUser";
@@ -31,6 +31,15 @@ function mapAudio(r: AudioRow): Audio {
     risco: r.risco, duracaoSeg: r.duracao_seg, tags: r.tags ?? [], linkOrigem: r.link_origem,
     favorito: r.favorito, criadoEm: r.created_at,
   };
+}
+// Link do TikTok (tiktok.com ou subdomínio): muda o rótulo para "Usar no TikTok".
+function ehTiktok(u: string): boolean {
+  try {
+    const host = new URL(u).hostname.toLowerCase();
+    return host === "tiktok.com" || host.endsWith(".tiktok.com");
+  } catch {
+    return false;
+  }
 }
 function mapUso(r: AudioUsoRow): AudioUso {
   return { id: r.id, audioId: r.audio_id, contexto: r.contexto, data: r.data };
@@ -128,6 +137,62 @@ export default function AudiosPage() {
     }
   }
 
+  // TRAZER DO RADAR: os sons que se repetem (2+ vezes) nos criadores que você acompanha entram como Trend, com o
+  // link do som no TikTok (ou a busca dele). Não baixa áudio de ninguém: guarda o link para usar o som pelo próprio app.
+  // "Som original" sozinho não entra (cada criador tem o seu, não é um som em alta).
+  const [trazendo, setTrazendo] = useState(false);
+  async function trazerDoRadar() {
+    if (!user) return;
+    setTrazendo(true);
+    try {
+      const sb = supabaseBrowser();
+      const { data, error } = await sb.from("radar_conteudos").select("audio_nome,audio_artista,audio_url,url").eq("user_id", user.id).not("audio_nome", "is", null).limit(2000);
+      if (error) { toast(`Não consegui ler o Radar: ${error.message}`); return; }
+      const generico = /^(som original|original sound|sonido original|оригинальный звук|原聲|原声|原創音樂)\b/i;
+      const grupos = new Map<string, { nome: string; artista: string | null; link: string | null; videos: string[] }>();
+      for (const r of (data as { audio_nome: string; audio_artista: string | null; audio_url: string | null; url: string | null }[]) ?? []) {
+        const nome = (r.audio_nome ?? "").trim();
+        if (!nome || generico.test(nome)) continue;
+        const k = nome.toLowerCase();
+        const g = grupos.get(k) ?? { nome, artista: r.audio_artista?.trim() || null, link: null, videos: [] };
+        g.link ||= r.audio_url || null;
+        if (r.url) g.videos.push(r.url);
+        grupos.set(k, g);
+      }
+      const jaTem = new Set(itens.map((a) => a.titulo.toLowerCase()));
+      const novos = [...grupos.values()].filter((g) => g.videos.length >= 2 && !jaTem.has(g.nome.toLowerCase())).map((g) => ({
+        user_id: user.id, titulo: g.nome.slice(0, 120), artista: g.artista, tipo: "trend" as TipoAudio, licenciamento: "desconhecido",
+        link_origem: g.link || `https://www.tiktok.com/search?q=${encodeURIComponent(`${g.nome} ${g.artista ?? ""}`.trim())}`,
+        tags: ["radar"],
+      }));
+      if (novos.length === 0) { toast("Nenhum som novo em alta no Radar (os que se repetem já estão aqui)."); return; }
+      const { error: e2 } = await sb.from("audios").insert(novos);
+      if (e2) { toast(`Não consegui salvar: ${e2.message}`); return; }
+      toast(`${novos.length} som(ns) em alta trazido(s) do Radar como Trend.`);
+      carregar();
+    } finally {
+      setTrazendo(false);
+    }
+  }
+
+  // ADICIONAR POR LINK: cola o link de um som (tiktok.com/music/...) ou de um vídeo. Guarda só o link (sem baixar).
+  async function adicionarPorLink() {
+    if (!user) return;
+    const link = window.prompt("Cole o link do som ou do vídeo (TikTok, YouTube, Instagram):")?.trim();
+    if (!link) return;
+    let url: URL;
+    try { url = new URL(link); } catch { toast("Esse link não parece válido."); return; }
+    if (!/^https?:$/.test(url.protocol)) { toast("Use um link que comece com https://"); return; }
+    const musica = url.pathname.match(/\/music\/(.+?)-(\d+)\/?$/);
+    const titulo = musica ? decodeURIComponent(musica[1]).replace(/-/g, " ") : (window.prompt("Nome do áudio:", "")?.trim() || url.hostname.replace(/^www\./, ""));
+    const { error } = await supabaseBrowser().from("audios").insert({
+      user_id: user.id, titulo: titulo.slice(0, 120), tipo: musica ? "trend" : (tipoAtivo ?? "trend"), licenciamento: "desconhecido", link_origem: url.toString(), tags: [],
+    });
+    if (error) { toast(`Não consegui salvar: ${error.message}`); return; }
+    toast("Áudio salvo pelo link.");
+    carregar();
+  }
+
   async function atualizar(id: string, patch: Partial<{
     titulo: string; tipo: TipoAudio | null; categoria_sfx: CategoriaSfx | null; artista: string | null;
     licenciamento: Licenciamento | null; clima: Clima | null; bpm: number | null; momento: Momento | null;
@@ -208,9 +273,17 @@ export default function AudiosPage() {
         titulo="Áudios"
         descricao="SFX, músicas, falas, trends e ambientes."
         acao={
-          <button onClick={() => fileInputRef.current?.click()} disabled={enviando} className="flex min-h-[44px] items-center gap-2 rounded-md bg-teal-500 px-4 text-sm font-medium text-neutral-950 hover:opacity-90 disabled:opacity-50">
-            <Plus className="h-4 w-4" /> {enviando ? "Enviando..." : "Adicionar"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={trazerDoRadar} disabled={trazendo} title="Áudios que se repetem nos criadores que você acompanha no Radar" className="flex min-h-[44px] items-center gap-2 rounded-md border border-neutral-700 px-3 text-sm text-neutral-200 hover:border-teal-500/40 disabled:opacity-50">
+              <Radio className="h-4 w-4" /> {trazendo ? "Trazendo…" : "Trazer do Radar"}
+            </button>
+            <button onClick={adicionarPorLink} className="flex min-h-[44px] items-center gap-2 rounded-md border border-neutral-700 px-3 text-sm text-neutral-200 hover:border-teal-500/40">
+              <Link2 className="h-4 w-4" /> Adicionar por link
+            </button>
+            <button onClick={() => fileInputRef.current?.click()} disabled={enviando} className="flex min-h-[44px] items-center gap-2 rounded-md bg-teal-500 px-4 text-sm font-medium text-neutral-950 hover:opacity-90 disabled:opacity-50">
+              <Plus className="h-4 w-4" /> {enviando ? "Enviando..." : "Enviar arquivo"}
+            </button>
+          </div>
         }
       />
       <input ref={fileInputRef} type="file" accept="audio/*" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) adicionarArquivos(e.target.files); e.target.value = ""; }} />
@@ -244,7 +317,7 @@ export default function AudiosPage() {
       {carregando ? (
         <p className="py-10 text-center text-sm text-neutral-600">Carregando...</p>
       ) : filtrados.length === 0 ? (
-        <EmptyState icone={Music} titulo={itens.length === 0 ? "Nenhum áudio ainda" : "Nenhum áudio encontrado"} descricao={itens.length === 0 ? "Clique em Adicionar pra enviar arquivos." : "Tente outro termo ou filtro."} />
+        <EmptyState icone={Music} titulo={itens.length === 0 ? "Nenhum áudio ainda" : "Nenhum áudio encontrado"} descricao={itens.length === 0 ? "Três jeitos de trazer: Trazer do Radar (os sons que se repetem nos criadores que você acompanha), Adicionar por link (cole o link de um som ou vídeo do TikTok) ou Enviar arquivo (mp3, wav, m4a)." : "Tente outro termo ou filtro."} />
       ) : (
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {filtrados.map((a) => {
@@ -259,6 +332,12 @@ export default function AudiosPage() {
                   {a.favorito && <Star className="h-3.5 w-3.5 shrink-0 text-amber-400" fill="currentColor" />}
                 </div>
                 {a.arquivoUrl && resolverUrl(a.arquivoUrl, urls) && <audio src={resolverUrl(a.arquivoUrl, urls)} controls className="mb-2 h-8 w-full" onClick={(e) => e.stopPropagation()} />}
+                {!a.arquivoUrl && a.linkOrigem && (
+                  <a href={a.linkOrigem} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+                    className="mb-2 flex min-h-[36px] items-center justify-center gap-1.5 rounded-md border border-neutral-700 text-xs text-neutral-200 hover:border-teal-500/40">
+                    <ExternalLink className="h-3.5 w-3.5" /> {ehTiktok(a.linkOrigem) ? "Ouvir e usar no TikTok" : "Ouvir na origem"}
+                  </a>
+                )}
                 <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-neutral-500">
                   {a.tipo && <span className="rounded-full bg-teal-500/10 px-1.5 py-0.5 text-teal-300">{TIPOS.find((t) => t.id === a.tipo)?.rotulo}</span>}
                   {a.categoriaSfx && <span className="rounded-full bg-neutral-800 px-1.5 py-0.5 text-neutral-400">{CATEGORIAS_SFX.find((c) => c.id === a.categoriaSfx)?.rotulo}</span>}
@@ -287,16 +366,26 @@ export default function AudiosPage() {
             </div>
             <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
               {drawerItem.arquivoUrl && resolverUrl(drawerItem.arquivoUrl, urls) && <audio src={resolverUrl(drawerItem.arquivoUrl, urls)} controls className="w-full" />}
-              <div className="flex gap-2">
-                <button onClick={() => baixar(drawerItem)} className="flex items-center gap-1.5 rounded-md bg-teal-500 px-3 py-1.5 text-xs font-medium text-neutral-950 hover:opacity-90">
-                  <Download className="h-3.5 w-3.5" /> Baixar
-                </button>
+              <div className="flex flex-wrap gap-2">
+                {drawerItem.arquivoUrl && (
+                  <button onClick={() => baixar(drawerItem)} className="flex min-h-[40px] items-center gap-1.5 rounded-md bg-teal-500 px-3 text-xs font-medium text-neutral-950 hover:opacity-90">
+                    <Download className="h-3.5 w-3.5" /> Baixar
+                  </button>
+                )}
                 {drawerItem.linkOrigem && (
-                  <a href={drawerItem.linkOrigem} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 rounded-md border border-neutral-800 px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200">
-                    <ExternalLink className="h-3.5 w-3.5" /> Origem
+                  <a href={drawerItem.linkOrigem} target="_blank" rel="noreferrer" className="flex min-h-[40px] items-center gap-1.5 rounded-md border border-neutral-700 px-3 text-xs text-neutral-200 hover:border-teal-500/40">
+                    <ExternalLink className="h-3.5 w-3.5" /> {ehTiktok(drawerItem.linkOrigem) ? "Usar no TikTok" : "Abrir origem"}
                   </a>
                 )}
               </div>
+              {/* Como levar para o TikTok: som do TikTok se usa pelo próprio app; arquivo próprio entra pelo editor do vídeo. */}
+              <p className="text-[11px] leading-relaxed text-neutral-500">
+                {drawerItem.linkOrigem && ehTiktok(drawerItem.linkOrigem)
+                  ? "No celular: Usar no TikTok abre o som no app. Toque em Usar este som e grave ou escolha o vídeo. Se abrir um vídeo, toque no disco girando no canto e depois em Usar este som."
+                  : drawerItem.arquivoUrl
+                    ? "Arquivo próprio: baixe, monte o vídeo no CapCut (ou no editor do TikTok, em Sons > Adicionar som do aparelho) e publique. Confira a licença antes."
+                    : "Sem arquivo nem link: cole o link do som em Abrir origem para conseguir usar."}
+              </p>
               <EditableField value={drawerItem.titulo} onSave={(v) => atualizar(drawerItem.id, { titulo: v })} displayClassName="text-lg font-semibold text-neutral-100" />
 
               <div>
