@@ -8,12 +8,15 @@ import { useToast } from "@/components/ToastProvider";
 import PageHeader from "@/components/ui/PageHeader";
 import Card from "@/components/ui/Card";
 import EmptyState from "@/components/ui/EmptyState";
+import BulkBar from "@/components/ui/BulkBar";
+import ViewSwitcher, { useVisualizacao } from "@/components/ui/ViewSwitcher";
 import { enviarBruto } from "@/lib/production/storage";
 import {
-  listarBrutos, criarBruto, atualizarBruto, excluirBruto,
+  listarBrutos, criarBruto, excluirBruto,
   listarProducaoProjetos, criarProducaoProjeto, associarBrutoAoProjeto,
 } from "@/lib/production/data";
-import type { Bruto, ProducaoProjeto, StatusBruto, StatusProjeto } from "@/lib/production/types";
+import { ROTULO_STATUS_PROJETO, ROTULO_TIPO_PROJETO } from "@/lib/production/rotulos";
+import type { Bruto, ProducaoProjeto, StatusBruto } from "@/lib/production/types";
 
 const ROTULO_STATUS_BRUTO: Record<StatusBruto, string> = {
   novo: "Novo", em_projeto: "Em projeto", processando: "Processando", pronto: "Pronto", erro: "Erro",
@@ -21,10 +24,6 @@ const ROTULO_STATUS_BRUTO: Record<StatusBruto, string> = {
 const COR_STATUS_BRUTO: Record<StatusBruto, string> = {
   novo: "border-neutral-700 text-neutral-400", em_projeto: "border-sky-500/40 text-sky-300",
   processando: "border-amber-500/40 text-amber-300", pronto: "border-teal-500/40 text-teal-300", erro: "border-[#F0997B]/40 text-[#F0997B]",
-};
-const ROTULO_STATUS_PROJETO: Record<StatusProjeto, string> = {
-  rascunho: "Rascunho", preparando: "Preparando", processando: "Processando", revisao: "Revisão",
-  aprovado: "Aprovado", exportado: "Exportado", publicado: "Publicado",
 };
 
 const CHAVE_ABA_PRODUCTION = "echo-assets:production-aba";
@@ -65,6 +64,7 @@ export default function ProductionPage() {
   const [carregando, setCarregando] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
+  const [visualizacao, setVisualizacao] = useVisualizacao("production-inbox", "grade");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const carregar = useCallback(async () => {
@@ -101,9 +101,17 @@ export default function ProductionPage() {
     });
   }
 
-  async function excluir(id: string) {
-    if (!window.confirm("Excluir este bruto? O arquivo original some do Storage.")) return;
-    await excluirBruto(id);
+  // Vai para a Lixeira; o video so sai do Storage na exclusao definitiva de la.
+  async function moverParaLixeira(ids: string[]) {
+    if (ids.length === 0) return;
+    const texto = ids.length === 1 ? "Mover este bruto para a Lixeira?" : `Mover ${ids.length} brutos para a Lixeira?`;
+    if (!window.confirm(`${texto} O vídeo continua guardado até você excluir de vez na Lixeira.`)) return;
+    let falha = 0;
+    for (const id of ids) {
+      try { await excluirBruto(id); } catch { falha++; }
+    }
+    if (falha < ids.length) toast(ids.length - falha === 1 ? "Bruto na Lixeira" : `${ids.length - falha} brutos na Lixeira`);
+    setSelecionados(new Set());
     carregar();
   }
 
@@ -140,13 +148,9 @@ export default function ProductionPage() {
       ) : aba === "inbox" ? (
         <div>
           <div className="mb-4 flex items-center justify-between gap-2">
-            <p className="text-xs text-neutral-500">{selecionados.size > 0 ? `${selecionados.size} selecionado(s)` : "Selecione um ou mais brutos pra associar a um projeto"}</p>
-            <div className="flex gap-2">
-              {selecionados.size > 0 && (
-                <button onClick={criarProjetoComSelecionados} className="flex min-h-[40px] items-center gap-2 rounded-md border border-teal-500/30 px-3 text-xs text-teal-300 hover:bg-teal-500/10">
-                  <Link2 className="h-3.5 w-3.5" /> Criar produção com selecionados
-                </button>
-              )}
+            <p className="text-xs text-neutral-500">Selecione um ou mais brutos para criar uma produção</p>
+            <div className="flex items-center gap-2">
+              <ViewSwitcher valor={visualizacao} onMudar={setVisualizacao} />
               <button onClick={() => inputRef.current?.click()} disabled={enviando} className="flex min-h-[40px] items-center gap-2 rounded-md bg-teal-500 px-4 text-sm font-medium text-neutral-950 hover:opacity-90 disabled:opacity-50">
                 <Upload className="h-4 w-4" /> {enviando ? "Enviando..." : "Adicionar bruto"}
               </button>
@@ -156,27 +160,40 @@ export default function ProductionPage() {
           {brutos.length === 0 ? (
             <EmptyState icone={Film} titulo="Nenhum bruto ainda" descricao="Adicione o vídeo cru antes de transformar em projeto." />
           ) : (
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <div className={visualizacao === "grade" ? "grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3" : "space-y-1"}>
               {brutos.map((b) => (
-                <Card key={b.id} className={`p-3 ${selecionados.has(b.id) ? "border-teal-500/50" : ""}`}>
-                  <div className="mb-2 flex items-start gap-2">
-                    <input type="checkbox" checked={selecionados.has(b.id)} onChange={() => alternarSelecao(b.id)} className="mt-1 shrink-0" />
+                <Card key={b.id} className={`${visualizacao === "grade" ? "p-3" : "flex items-center gap-3 px-3 py-2"} ${selecionados.has(b.id) ? "border-teal-500/50" : ""}`}>
+                  <div className={`flex min-w-0 flex-1 items-start gap-2 ${visualizacao === "grade" ? "mb-2" : ""}`}>
+                    <input type="checkbox" checked={selecionados.has(b.id)} onChange={() => alternarSelecao(b.id)} aria-label={`Selecionar ${b.nome}`} className="mt-1 h-4 w-4 shrink-0 accent-teal-500" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm text-neutral-100">{b.nome}</p>
                       <p className="text-[11px] text-neutral-500">
-                        {b.duracao_seg != null ? `${Math.round(b.duracao_seg / 60)}min` : "duração desconhecida"}
-                        {b.tamanho_bytes != null && ` · ${Math.round(b.tamanho_bytes / 1024 / 1024)}MB`}
+                        {b.duracao_seg != null ? `${Math.round(b.duracao_seg / 60)} min` : "duração desconhecida"}
+                        {b.tamanho_bytes != null && ` · ${Math.round(b.tamanho_bytes / 1024 / 1024)} MB`}
                         {b.origem && ` · ${b.origem}`}
                       </p>
                     </div>
-                    <button onClick={() => excluir(b.id)} className="shrink-0 text-neutral-600 hover:text-[#F0997B]"><Trash2 className="h-3.5 w-3.5" /></button>
+                    {visualizacao === "grade" && (
+                      <button onClick={() => moverParaLixeira([b.id])} title="Mover para a Lixeira" aria-label={`Mover ${b.nome} para a Lixeira`} className="shrink-0 text-neutral-500 hover:text-[#F0997B]"><Trash2 className="h-3.5 w-3.5" /></button>
+                    )}
                   </div>
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] ${COR_STATUS_BRUTO[b.status]}`}>{ROTULO_STATUS_BRUTO[b.status]}</span>
+                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] ${COR_STATUS_BRUTO[b.status]}`}>{ROTULO_STATUS_BRUTO[b.status]}</span>
+                  {visualizacao === "lista" && (
+                    <button onClick={() => moverParaLixeira([b.id])} title="Mover para a Lixeira" aria-label={`Mover ${b.nome} para a Lixeira`} className="shrink-0 text-neutral-500 hover:text-[#F0997B]"><Trash2 className="h-3.5 w-3.5" /></button>
+                  )}
                   {b.status === "erro" && b.erro_mensagem && <p className="mt-1 text-[10px] text-[#F0997B]">{b.erro_mensagem}</p>}
                 </Card>
               ))}
             </div>
           )}
+          <BulkBar quantidade={selecionados.size} total={brutos.length} onSelecionarTodos={() => setSelecionados(new Set(brutos.map((b) => b.id)))} onLimpar={() => setSelecionados(new Set())}>
+            <button onClick={criarProjetoComSelecionados} className="flex min-h-[32px] items-center gap-1.5 rounded-md border border-teal-500/30 px-2.5 text-xs text-teal-300 hover:bg-teal-500/10">
+              <Link2 className="h-3.5 w-3.5" /> Criar produção
+            </button>
+            <button onClick={() => moverParaLixeira(Array.from(selecionados))} className="flex min-h-[32px] items-center gap-1.5 rounded-md border border-[#F0997B]/40 px-2.5 text-xs text-[#F0997B] hover:bg-[#F0997B]/10">
+              <Trash2 className="h-3.5 w-3.5" /> Lixeira
+            </button>
+          </BulkBar>
         </div>
       ) : (
         <div>
@@ -195,7 +212,7 @@ export default function ProductionPage() {
                     <p className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-100">{p.titulo}</p>
                     <span className="shrink-0 rounded-full border border-neutral-700 px-2 py-0.5 text-[10px] text-neutral-400">{ROTULO_STATUS_PROJETO[p.status]}</span>
                   </div>
-                  <p className="text-[11px] text-neutral-500">{p.tipo ?? "-"}</p>
+                  <p className="text-[11px] text-neutral-500">{p.tipo ? ROTULO_TIPO_PROJETO[p.tipo] : "-"}</p>
                 </Card>
               ))}
             </div>

@@ -81,7 +81,8 @@ export async function urlsAssinadas(caminhos: (string | null | undefined)[], exp
 // Lanca erro se a remocao falhar — quem chama (ex.: exclusao definitiva da
 // lixeira) precisa saber que o arquivo NAO foi removido, pra nao apagar o
 // registro do banco e fingir que a exclusao terminou.
-export async function removerArquivo(caminho: string) {
-  const { error } = await supabaseBrowser().storage.from(BUCKET).remove([caminho]);
+// bucket: "producao-raw" para video bruto da Production (ver production/storage.ts).
+export async function removerArquivo(caminho: string, bucket: string = BUCKET) {
+  const { error } = await supabaseBrowser().storage.from(bucket).remove([caminho]);
   if (error) throw error;
 }

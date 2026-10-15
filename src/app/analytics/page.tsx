@@ -6,7 +6,8 @@ import { useUser } from "@/lib/useUser";
 import PageHeader from "@/components/ui/PageHeader";
 import Card from "@/components/ui/Card";
 import EmptyState from "@/components/ui/EmptyState";
-import { listarProducaoProjetos, listarPublicacoes, listarMetricas } from "@/lib/production/data";
+import { listarProducaoProjetos, listarPublicacoes, listarMetricasDePublicacoes } from "@/lib/production/data";
+import { ROTULO_PLATAFORMA } from "@/lib/production/rotulos";
 import type { ProducaoProjeto, Publicacao, Metrica } from "@/lib/production/types";
 
 interface LinhaProjeto {
@@ -28,15 +29,14 @@ export default function AnalyticsPage() {
       if (!porProjeto.has(p.projeto_id)) porProjeto.set(p.projeto_id, []);
       porProjeto.get(p.projeto_id)!.push(p);
     }
+    // Uma consulta para todas as metricas (antes era uma por publicacao).
+    const idsProjetos = new Set(projetos.map((p) => p.id));
+    const metricas = await listarMetricasDePublicacoes(publicacoes.filter((p) => idsProjetos.has(p.projeto_id)).map((p) => p.id));
     const resultado: LinhaProjeto[] = [];
     for (const projeto of projetos) {
       const pubs = porProjeto.get(projeto.id);
       if (!pubs || pubs.length === 0) continue;
-      const comMetricas = await Promise.all(pubs.map(async (publicacao) => {
-        const metricas = await listarMetricas(publicacao.id);
-        return { publicacao, ultimaMetrica: metricas[0] ?? null };
-      }));
-      resultado.push({ projeto, publicacoes: comMetricas });
+      resultado.push({ projeto, publicacoes: pubs.map((publicacao) => ({ publicacao, ultimaMetrica: metricas[publicacao.id]?.[0] ?? null })) });
     }
     setLinhas(resultado);
     setCarregando(false);
@@ -71,7 +71,7 @@ export default function AnalyticsPage() {
                   <tbody>
                     {publicacoes.map(({ publicacao, ultimaMetrica }) => (
                       <tr key={publicacao.id} className="border-t border-neutral-900">
-                        <td className="py-1.5 pr-3 text-neutral-300">{publicacao.plataforma}</td>
+                        <td className="py-1.5 pr-3 text-neutral-300">{ROTULO_PLATAFORMA[publicacao.plataforma] ?? publicacao.plataforma}</td>
                         <td className="py-1.5 pr-3 text-neutral-400">{ultimaMetrica?.views ?? "-"}</td>
                         <td className="py-1.5 pr-3 text-neutral-400">{ultimaMetrica?.likes ?? "-"}</td>
                         <td className="py-1.5 pr-3 text-neutral-400">{ultimaMetrica?.comments ?? "-"}</td>

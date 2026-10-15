@@ -4,24 +4,32 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, Trash2, Plus, FileText, Flag, Scissors, ClipboardCheck, Send, BarChart3,
-  CheckCircle2, XCircle, RotateCcw, AlertCircle,
+  CheckCircle2, XCircle, RotateCcw, AlertCircle, ExternalLink,
+  Zap, Laugh, Shirt, Sparkles, BookOpen, Info, Heart, Eye, Circle, type LucideIcon,
 } from "lucide-react";
 import { useUser } from "@/lib/useUser";
 import { useToast } from "@/components/ToastProvider";
 import Card from "@/components/ui/Card";
 import EmptyState from "@/components/ui/EmptyState";
 import EditableField from "@/components/ui/EditableField";
+import Timecode from "@/components/ui/Timecode";
+import { formatarTimecode } from "@/lib/timecode";
 import {
-  listarBrutosDoProjeto, listarProducaoProjetos, atualizarProducaoProjeto, excluirProducaoProjeto,
+  listarBrutosDoProjeto, obterProducaoProjeto, atualizarProducaoProjeto, excluirProducaoProjeto,
   obterTranscricao, criarTranscricao, listarSegmentos,
   listarMomentos, criarMomento, atualizarMomento, excluirMomento,
   listarClips, criarClip, atualizarClip, excluirClip,
-  listarFeedbacks, criarFeedback,
-  listarPublicacoes, criarPublicacao, atualizarPublicacao, excluirPublicacao, listarMetricas, adicionarMetrica,
+  criarFeedback,
+  listarPublicacoes, criarPublicacao, atualizarPublicacao, excluirPublicacao, listarMetricasDePublicacoes, adicionarMetrica,
   listarDnas,
 } from "@/lib/production/data";
+import {
+  CATEGORIAS_MOMENTO, ROTULO_CATEGORIA_MOMENTO, STATUS_MOMENTO, ROTULO_STATUS_MOMENTO,
+  FORMATOS_CLIP, ROTULO_FORMATO_CLIP, STATUS_CLIP, ROTULO_STATUS_CLIP, TIPOS_FEEDBACK, ROTULO_TIPO_FEEDBACK,
+  TIPOS_PROJETO, ROTULO_TIPO_PROJETO, STATUS_PROJETO, ROTULO_STATUS_PROJETO, PLATAFORMAS, ROTULO_PLATAFORMA,
+} from "@/lib/production/rotulos";
 import type {
-  Bruto, ProducaoProjeto, Transcricao, SegmentoTranscricao, Momento, Clip, Feedback,
+  Bruto, ProducaoProjeto, Transcricao, SegmentoTranscricao, Momento, Clip,
   Publicacao, Metrica, EditingDna, CategoriaMomento, FormatoClip, StatusClip, TipoFeedback,
 } from "@/lib/production/types";
 
@@ -36,19 +44,11 @@ const TABS: { id: Tab; nome: string; icone: typeof FileText }[] = [
   { id: "metricas", nome: "Métricas", icone: BarChart3 },
 ];
 
-const CATEGORIAS_MOMENTO: CategoriaMomento[] = ["hook", "engracado", "fashion", "grwm", "historia", "informativo", "emocional", "visual", "outro"];
-const EMOJI_CATEGORIA: Record<CategoriaMomento, string> = {
-  hook: "🔥", engracado: "😂", fashion: "👗", grwm: "💄", historia: "📖", informativo: "ℹ️", emocional: "💛", visual: "🎨", outro: "•",
+const ICONE_CATEGORIA: Record<CategoriaMomento, LucideIcon> = {
+  hook: Zap, engracado: Laugh, fashion: Shirt, grwm: Sparkles, historia: BookOpen, informativo: Info, emocional: Heart, visual: Eye, outro: Circle,
 };
-const FORMATOS_CLIP: FormatoClip[] = ["tiktok", "reel", "short", "youtube", "custom"];
-const STATUS_CLIP: StatusClip[] = ["draft", "queued", "processing", "review", "approved", "rejected", "exported"];
-
-function formatarMs(ms: number): string {
-  const totalSeg = Math.floor(ms / 1000);
-  const min = Math.floor(totalSeg / 60);
-  const seg = totalSeg % 60;
-  return `${min}:${seg.toString().padStart(2, "0")}`;
-}
+const formatarMs = formatarTimecode;
+const CLASSE_SELECT = "min-h-[32px] rounded border border-neutral-800 bg-neutral-950 px-1.5 text-xs text-neutral-300 outline-none focus:border-teal-500/40";
 
 export default function ProductionProjectPage() {
   const { id } = useParams<{ id: string }>();
@@ -64,8 +64,8 @@ export default function ProductionProjectPage() {
   const carregar = useCallback(async () => {
     if (!user) return;
     setCarregando(true);
-    const [todos, b, d] = await Promise.all([listarProducaoProjetos(user.id), listarBrutosDoProjeto(id), listarDnas(user.id)]);
-    setProjeto(todos.find((p) => p.id === id) ?? null);
+    const [p, b, d] = await Promise.all([obterProducaoProjeto(id), listarBrutosDoProjeto(id), listarDnas(user.id)]);
+    setProjeto(p);
     setBrutos(b);
     setDnas(d);
     setCarregando(false);
@@ -78,9 +78,13 @@ export default function ProductionProjectPage() {
     carregar();
   }
   async function excluir() {
-    if (!window.confirm("Excluir este projeto de produção? Os brutos originais não são apagados.")) return;
-    await excluirProducaoProjeto(id);
-    toast("Projeto excluído");
+    if (!window.confirm("Mover este projeto de produção para a Lixeira? Os brutos continuam na Inbox.")) return;
+    try {
+      await excluirProducaoProjeto(id);
+    } catch {
+      return; // o aviso vermelho do banco ja explica o motivo
+    }
+    toast("Projeto na Lixeira");
     router.push("/production");
   }
 
@@ -103,13 +107,13 @@ export default function ProductionProjectPage() {
             <p className="mb-1 text-[10px] uppercase text-neutral-600">Tipo</p>
             <select value={projeto.tipo ?? ""} onChange={(e) => salvar({ tipo: (e.target.value || null) as ProducaoProjeto["tipo"] })} className="min-h-[32px] w-full rounded-md border border-neutral-800 bg-neutral-950 px-1.5 text-xs text-neutral-300 outline-none focus:border-teal-500/40">
               <option value="">-</option>
-              {["vlog", "grwm", "fashion", "gaming", "cover", "asmr", "lifestyle", "outro"].map((t) => <option key={t} value={t}>{t}</option>)}
+              {TIPOS_PROJETO.map((t) => <option key={t} value={t}>{ROTULO_TIPO_PROJETO[t]}</option>)}
             </select>
           </div>
           <div>
             <p className="mb-1 text-[10px] uppercase text-neutral-600">Status</p>
             <select value={projeto.status} onChange={(e) => salvar({ status: e.target.value as ProducaoProjeto["status"] })} className="min-h-[32px] w-full rounded-md border border-neutral-800 bg-neutral-950 px-1.5 text-xs text-neutral-300 outline-none focus:border-teal-500/40">
-              {["rascunho", "preparando", "processando", "revisao", "aprovado", "exportado", "publicado"].map((s) => <option key={s} value={s}>{s}</option>)}
+              {STATUS_PROJETO.map((s) => <option key={s} value={s}>{ROTULO_STATUS_PROJETO[s]}</option>)}
             </select>
           </div>
           <div>
@@ -136,7 +140,7 @@ export default function ProductionProjectPage() {
 
       {tab === "originais" && <AbaOriginais brutos={brutos} />}
       {tab === "transcricao" && <AbaTranscricao brutos={brutos} userId={user!.id} />}
-      {tab === "momentos" && <AbaMomentos brutos={brutos} userId={user!.id} />}
+      {tab === "momentos" && <AbaMomentos brutos={brutos} userId={user!.id} projetoId={projeto.id} />}
       {tab === "cortes" && <AbaCortes projeto={projeto} brutos={brutos} userId={user!.id} />}
       {tab === "review" && <AbaReview projeto={projeto} userId={user!.id} />}
       {tab === "publicacao" && <AbaPublicacao projeto={projeto} userId={user!.id} />}
@@ -213,7 +217,8 @@ function AbaTranscricao({ brutos, userId }: { brutos: Bruto[]; userId: string })
   );
 }
 
-function AbaMomentos({ brutos, userId }: { brutos: Bruto[]; userId: string }) {
+function AbaMomentos({ brutos, userId, projetoId }: { brutos: Bruto[]; userId: string; projetoId: string }) {
+  const toast = useToast();
   const [brutoId, setBrutoId] = useState(brutos[0]?.id ?? "");
   const [momentos, setMomentos] = useState<Momento[]>([]);
 
@@ -232,8 +237,17 @@ function AbaMomentos({ brutos, userId }: { brutos: Bruto[]; userId: string }) {
     carregar();
   }
   async function remover(id: string) {
-    await excluirMomento(id);
+    try { await excluirMomento(id); } catch { return; }
+    toast("Momento na Lixeira");
     carregar();
+  }
+  // So momento aprovado vira corte: a sugestao nunca vai direto para a exportacao.
+  async function virarCorte(m: Momento) {
+    await criarClip({
+      user_id: userId, projeto_id: projetoId, bruto_id: m.bruto_id, momento_id: m.id, start_ms: m.start_ms, end_ms: m.end_ms,
+      nome: m.titulo, formato: "tiktok", aspect_ratio: "9:16", status: "draft", derivado_id: null,
+    });
+    toast("Corte criado na aba Cortes");
   }
 
   if (brutos.length === 0) return <EmptyState icone={Flag} titulo="Associe um bruto primeiro" />;
@@ -250,32 +264,41 @@ function AbaMomentos({ brutos, userId }: { brutos: Bruto[]; userId: string }) {
         <EmptyState icone={Flag} titulo="Nenhum momento ainda" descricao="Cadastre manualmente, ou aguarde um provider de análise futuro." />
       ) : (
         <div className="space-y-1.5">
-          {momentos.map((m) => (
-            <Card key={m.id} className="p-3">
-              <div className="mb-1.5 flex items-center gap-2">
-                <span className="shrink-0 text-lg">{EMOJI_CATEGORIA[m.categoria ?? "outro"]}</span>
-                <div className="min-w-0 flex-1">
-                  <EditableField value={m.titulo} onSave={(v) => salvar(m.id, { titulo: v })} displayClassName="text-sm text-neutral-100" />
+          {momentos.map((m) => {
+            const Icone = ICONE_CATEGORIA[m.categoria ?? "outro"];
+            return (
+              <Card key={m.id} className="p-3">
+                <div className="mb-1.5 flex items-center gap-2">
+                  <Icone className="h-4 w-4 shrink-0 text-teal-400" aria-label={ROTULO_CATEGORIA_MOMENTO[m.categoria ?? "outro"]} />
+                  <div className="min-w-0 flex-1">
+                    <EditableField value={m.titulo} onSave={(v) => salvar(m.id, { titulo: v })} displayClassName="text-sm text-neutral-100" />
+                  </div>
+                  <button onClick={() => remover(m.id)} title="Mover para a Lixeira" aria-label="Mover momento para a Lixeira" className="shrink-0 text-neutral-500 hover:text-[#F0997B]"><Trash2 className="h-3.5 w-3.5" /></button>
                 </div>
-                <button onClick={() => remover(m.id)} className="shrink-0 text-neutral-600 hover:text-[#F0997B]"><Trash2 className="h-3.5 w-3.5" /></button>
-              </div>
-              <div className="grid grid-cols-3 gap-1.5">
-                <input type="number" placeholder="início (ms)" value={m.start_ms} onChange={(e) => salvar(m.id, { start_ms: Number(e.target.value) })} className="min-h-[32px] rounded border border-neutral-800 bg-neutral-950 px-1.5 text-xs text-neutral-200 outline-none focus:border-teal-500/40" />
-                <input type="number" placeholder="fim (ms)" value={m.end_ms} onChange={(e) => salvar(m.id, { end_ms: Number(e.target.value) })} className="min-h-[32px] rounded border border-neutral-800 bg-neutral-950 px-1.5 text-xs text-neutral-200 outline-none focus:border-teal-500/40" />
-                <select value={m.categoria ?? ""} onChange={(e) => salvar(m.id, { categoria: e.target.value as CategoriaMomento })} className="min-h-[32px] rounded border border-neutral-800 bg-neutral-950 px-1.5 text-xs text-neutral-300 outline-none focus:border-teal-500/40">
-                  {CATEGORIAS_MOMENTO.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div className="mt-1.5 flex items-center justify-between">
-                <span className="text-[10px] text-neutral-600">{formatarMs(m.start_ms)}-{formatarMs(m.end_ms)} {m.score != null && `· score interno ${m.score}`}</span>
-                <select value={m.status} onChange={(e) => salvar(m.id, { status: e.target.value as Momento["status"] })} className="min-h-[28px] rounded border border-neutral-800 bg-neutral-950 px-1.5 text-[11px] text-neutral-400 outline-none focus:border-teal-500/40">
-                  <option value="sugerido">Sugerido</option>
-                  <option value="aprovado">Aprovado</option>
-                  <option value="descartado">Descartado</option>
-                </select>
-              </div>
-            </Card>
-          ))}
+                <div className="grid grid-cols-3 gap-1.5">
+                  <Timecode rotulo="Início" valorMs={m.start_ms} onSalvar={(ms) => salvar(m.id, { start_ms: ms })} />
+                  <Timecode rotulo="Fim" valorMs={m.end_ms} onSalvar={(ms) => salvar(m.id, { end_ms: ms })} />
+                  <select value={m.categoria ?? "outro"} onChange={(e) => salvar(m.id, { categoria: e.target.value as CategoriaMomento })} aria-label="Categoria" className={CLASSE_SELECT}>
+                    {CATEGORIAS_MOMENTO.map((c) => <option key={c} value={c}>{ROTULO_CATEGORIA_MOMENTO[c]}</option>)}
+                  </select>
+                </div>
+                {m.end_ms > 0 && m.end_ms <= m.start_ms && <p className="mt-1 text-[10px] text-[#F0997B]">O fim está antes do início.</p>}
+                <div className="mt-1.5 flex items-center justify-between gap-2">
+                  <span className="text-[10px] text-neutral-500">{m.score != null && `Pontuação ${m.score}`}{m.reason && ` · ${m.reason}`}</span>
+                  <div className="flex items-center gap-1.5">
+                    {m.status === "aprovado" && m.end_ms > m.start_ms && (
+                      <button onClick={() => virarCorte(m)} className="flex min-h-[28px] items-center gap-1 rounded border border-teal-500/30 px-2 text-[11px] text-teal-300 hover:bg-teal-500/10">
+                        <Scissors className="h-3 w-3" /> Virar corte
+                      </button>
+                    )}
+                    <select value={m.status} onChange={(e) => salvar(m.id, { status: e.target.value as Momento["status"] })} aria-label="Status do momento" className="min-h-[28px] rounded border border-neutral-800 bg-neutral-950 px-1.5 text-[11px] text-neutral-400 outline-none focus:border-teal-500/40">
+                      {STATUS_MOMENTO.map((s) => <option key={s} value={s}>{ROTULO_STATUS_MOMENTO[s]}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>
@@ -283,6 +306,7 @@ function AbaMomentos({ brutos, userId }: { brutos: Bruto[]; userId: string }) {
 }
 
 function AbaCortes({ projeto, brutos, userId }: { projeto: ProducaoProjeto; brutos: Bruto[]; userId: string }) {
+  const toast = useToast();
   const [clips, setClips] = useState<Clip[]>([]);
 
   const carregar = useCallback(async () => setClips(await listarClips(projeto.id)), [projeto.id]);
@@ -298,7 +322,8 @@ function AbaCortes({ projeto, brutos, userId }: { projeto: ProducaoProjeto; brut
     carregar();
   }
   async function remover(id: string) {
-    await excluirClip(id);
+    try { await excluirClip(id); } catch { return; }
+    toast("Corte na Lixeira");
     carregar();
   }
 
@@ -315,18 +340,22 @@ function AbaCortes({ projeto, brutos, userId }: { projeto: ProducaoProjeto; brut
             <Card key={c.id} className="p-3">
               <div className="mb-1.5 flex items-center justify-between gap-2">
                 <EditableField value={c.nome} onSave={(v) => salvar(c.id, { nome: v })} displayClassName="text-sm text-neutral-100" />
-                <button onClick={() => remover(c.id)} className="shrink-0 text-neutral-600 hover:text-[#F0997B]"><Trash2 className="h-3.5 w-3.5" /></button>
+                <button onClick={() => remover(c.id)} title="Mover para a Lixeira" aria-label="Mover corte para a Lixeira" className="shrink-0 text-neutral-500 hover:text-[#F0997B]"><Trash2 className="h-3.5 w-3.5" /></button>
               </div>
-              <p className="mb-1.5 text-[11px] text-neutral-500">{formatarMs(c.start_ms)}-{formatarMs(c.end_ms)}</p>
+              <div className="mb-1.5 grid grid-cols-2 gap-1.5">
+                <Timecode rotulo="Início do corte" valorMs={c.start_ms} onSalvar={(ms) => salvar(c.id, { start_ms: ms })} />
+                <Timecode rotulo="Fim do corte" valorMs={c.end_ms} onSalvar={(ms) => salvar(c.id, { end_ms: ms })} />
+              </div>
+              {c.end_ms > c.start_ms && <p className="mb-1.5 text-[11px] text-neutral-500">Duração {formatarMs(c.end_ms - c.start_ms)}</p>}
               <div className="grid grid-cols-2 gap-1.5">
-                <select value={c.formato} onChange={(e) => salvar(c.id, { formato: e.target.value as FormatoClip })} className="min-h-[30px] rounded border border-neutral-800 bg-neutral-950 px-1.5 text-[11px] text-neutral-300 outline-none focus:border-teal-500/40">
-                  {FORMATOS_CLIP.map((f) => <option key={f} value={f}>{f}</option>)}
+                <select value={c.formato} onChange={(e) => salvar(c.id, { formato: e.target.value as FormatoClip })} aria-label="Formato" className={CLASSE_SELECT}>
+                  {FORMATOS_CLIP.map((f) => <option key={f} value={f}>{ROTULO_FORMATO_CLIP[f]}</option>)}
                 </select>
-                <select value={c.status} onChange={(e) => salvar(c.id, { status: e.target.value as StatusClip })} className="min-h-[30px] rounded border border-neutral-800 bg-neutral-950 px-1.5 text-[11px] text-neutral-300 outline-none focus:border-teal-500/40">
-                  {STATUS_CLIP.map((s) => <option key={s} value={s}>{s}</option>)}
+                <select value={c.status} onChange={(e) => salvar(c.id, { status: e.target.value as StatusClip })} aria-label="Status do corte" className={CLASSE_SELECT}>
+                  {STATUS_CLIP.map((s) => <option key={s} value={s}>{ROTULO_STATUS_CLIP[s]}</option>)}
                 </select>
               </div>
-              {c.status !== "exported" && <p className="mt-1.5 text-[10px] text-neutral-600">Sem renderizador conectado, status é só controle manual por enquanto.</p>}
+              {c.status !== "exported" && <p className="mt-1.5 text-[10px] text-neutral-500">Sem renderizador conectado, o status é controle manual por enquanto.</p>}
             </Card>
           ))}
         </div>
@@ -376,7 +405,7 @@ function AbaReview({ projeto, userId }: { projeto: ProducaoProjeto; userId: stri
             <div className="flex items-center justify-between gap-2">
               <div>
                 <p className="text-sm text-neutral-100">{c.nome}</p>
-                <p className="text-[11px] text-neutral-500">{formatarMs(c.start_ms)}-{formatarMs(c.end_ms)} · {c.formato} · status: {c.status}</p>
+                <p className="text-[11px] text-neutral-500">{formatarMs(c.start_ms)} a {formatarMs(c.end_ms)} · {ROTULO_FORMATO_CLIP[c.formato]} · {ROTULO_STATUS_CLIP[c.status]}</p>
               </div>
               <div className="flex shrink-0 gap-1">
                 <button onClick={() => mudarStatus(c.id, "approved")} title="Aprovar" className="flex h-8 w-8 items-center justify-center rounded-md text-neutral-500 hover:bg-teal-500/10 hover:text-teal-400"><CheckCircle2 className="h-4 w-4" /></button>
@@ -390,8 +419,8 @@ function AbaReview({ projeto, userId }: { projeto: ProducaoProjeto; userId: stri
             {feedbackAbertoId === c.id && (
               <div className="mt-2 space-y-2 rounded-md border border-neutral-800 bg-neutral-950/40 p-2">
                 <div className="flex gap-1.5">
-                  {(["gostei", "nao_gostei", "ajustar"] as TipoFeedback[]).map((t) => (
-                    <button key={t} onClick={() => setTipoFeedback(t)} className={`rounded-full border px-2 py-0.5 text-[10px] ${tipoFeedback === t ? "border-teal-500/40 bg-teal-500/10 text-teal-300" : "border-neutral-800 text-neutral-500"}`}>{t.replace("_", " ")}</button>
+                  {TIPOS_FEEDBACK.map((t) => (
+                    <button key={t} onClick={() => setTipoFeedback(t)} aria-pressed={tipoFeedback === t} className={`rounded-full border px-2 py-0.5 text-[10px] ${tipoFeedback === t ? "border-teal-500/40 bg-teal-500/10 text-teal-300" : "border-neutral-800 text-neutral-500"}`}>{ROTULO_TIPO_FEEDBACK[t]}</button>
                   ))}
                 </div>
                 <div className="flex flex-wrap gap-1">
@@ -442,7 +471,7 @@ function AbaPublicacao({ projeto, userId }: { projeto: ProducaoProjeto; userId: 
             <Card key={p.id} className="p-3">
               <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
                 <select defaultValue={p.plataforma} onChange={(e) => salvar(p.id, { plataforma: e.target.value as Publicacao["plataforma"] })} className="min-h-[30px] rounded border border-neutral-800 bg-neutral-950 px-1.5 text-[11px] text-neutral-300 outline-none focus:border-teal-500/40">
-                  {["tiktok", "instagram", "youtube", "outro"].map((pl) => <option key={pl} value={pl}>{pl}</option>)}
+                  {PLATAFORMAS.map((pl) => <option key={pl} value={pl}>{ROTULO_PLATAFORMA[pl]}</option>)}
                 </select>
                 <input placeholder="URL" defaultValue={p.url ?? ""} onBlur={(e) => salvar(p.id, { url: e.target.value })} className="min-h-[30px] rounded border border-neutral-800 bg-neutral-950 px-1.5 text-[11px] text-neutral-200 outline-none focus:border-teal-500/40" />
                 <input placeholder="título/legenda" defaultValue={p.titulo_legenda ?? ""} onBlur={(e) => salvar(p.id, { titulo_legenda: e.target.value })} className="min-h-[30px] rounded border border-neutral-800 bg-neutral-950 px-1.5 text-[11px] text-neutral-200 outline-none focus:border-teal-500/40" />
@@ -463,9 +492,7 @@ function AbaMetricas({ projeto, userId }: { projeto: ProducaoProjeto; userId: st
   const carregar = useCallback(async () => {
     const todas = (await listarPublicacoes(userId)).filter((p) => p.projeto_id === projeto.id);
     setPublicacoes(todas);
-    const mapa: Record<string, Metrica[]> = {};
-    await Promise.all(todas.map(async (p) => { mapa[p.id] = await listarMetricas(p.id); }));
-    setMetricasPorPub(mapa);
+    setMetricasPorPub(await listarMetricasDePublicacoes(todas.map((p) => p.id)));
   }, [userId, projeto.id]);
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -485,17 +512,20 @@ function AbaMetricas({ projeto, userId }: { projeto: ProducaoProjeto; userId: st
     <div className="space-y-3">
       {publicacoes.map((p) => (
         <Card key={p.id} className="p-3">
-          <p className="mb-2 text-sm text-neutral-200">{p.plataforma} {p.url && <a href={p.url} target="_blank" rel="noreferrer" className="text-teal-400">↗</a>}</p>
-          <form action={(fd) => registrar(p.id, fd)} className="mb-2 grid grid-cols-4 gap-1.5">
-            <input name="views" type="number" placeholder="views" className="min-h-[30px] rounded border border-neutral-800 bg-neutral-950 px-1.5 text-[11px] text-neutral-200 outline-none focus:border-teal-500/40" />
-            <input name="likes" type="number" placeholder="likes" className="min-h-[30px] rounded border border-neutral-800 bg-neutral-950 px-1.5 text-[11px] text-neutral-200 outline-none focus:border-teal-500/40" />
-            <input name="comments" type="number" placeholder="comments" className="min-h-[30px] rounded border border-neutral-800 bg-neutral-950 px-1.5 text-[11px] text-neutral-200 outline-none focus:border-teal-500/40" />
-            <button type="submit" className="rounded border border-neutral-800 text-[11px] text-teal-300 hover:bg-teal-500/10">registrar snapshot</button>
+          <p className="mb-2 flex items-center gap-1.5 text-sm text-neutral-200">
+            {ROTULO_PLATAFORMA[p.plataforma]}
+            {p.url && <a href={p.url} target="_blank" rel="noreferrer" title="Abrir publicação" aria-label="Abrir publicação" className="text-teal-400"><ExternalLink className="h-3.5 w-3.5" /></a>}
+          </p>
+          <form action={(fd) => registrar(p.id, fd)} className="mb-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+            <input name="views" type="number" min={0} placeholder="visualizações" aria-label="Visualizações" className="min-h-[30px] rounded border border-neutral-800 bg-neutral-950 px-1.5 text-[11px] text-neutral-200 outline-none focus:border-teal-500/40" />
+            <input name="likes" type="number" min={0} placeholder="curtidas" aria-label="Curtidas" className="min-h-[30px] rounded border border-neutral-800 bg-neutral-950 px-1.5 text-[11px] text-neutral-200 outline-none focus:border-teal-500/40" />
+            <input name="comments" type="number" min={0} placeholder="comentários" aria-label="Comentários" className="min-h-[30px] rounded border border-neutral-800 bg-neutral-950 px-1.5 text-[11px] text-neutral-200 outline-none focus:border-teal-500/40" />
+            <button type="submit" className="min-h-[30px] rounded border border-neutral-800 text-[11px] text-teal-300 hover:bg-teal-500/10">Registrar números</button>
           </form>
           {(metricasPorPub[p.id] ?? []).length > 0 && (
             <div className="space-y-1 text-[11px] text-neutral-500">
               {(metricasPorPub[p.id] ?? []).map((m) => (
-                <p key={m.id}>{new Date(m.captured_at).toLocaleDateString("pt-BR")}: {m.views ?? "-"} views · {m.likes ?? "-"} likes · {m.comments ?? "-"} comentários</p>
+                <p key={m.id}>{new Date(m.captured_at).toLocaleDateString("pt-BR")}: {m.views ?? "-"} visualizações · {m.likes ?? "-"} curtidas · {m.comments ?? "-"} comentários</p>
               ))}
             </div>
           )}

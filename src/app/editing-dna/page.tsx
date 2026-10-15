@@ -44,10 +44,10 @@ export default function EditingDnaPage() {
   }
 
   async function excluir(id: string) {
-    if (!window.confirm("Excluir este Editing DNA? Projetos que usam ele ficam sem DNA vinculado.")) return;
-    await excluirDna(id);
+    if (!window.confirm("Mover este Editing DNA para a Lixeira? Dá para restaurar de lá.")) return;
+    try { await excluirDna(id); } catch { return; }
     if (selecionadoId === id) setSelecionadoId(null);
-    toast("DNA excluído");
+    toast("DNA na Lixeira");
     carregar();
   }
 

@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "node --import ./scripts/testes/_registrar.mjs --test scripts/testes/*.test.mjs",
     "import-memes": "node scripts/import-memes.mjs"
   },
   "dependencies": {

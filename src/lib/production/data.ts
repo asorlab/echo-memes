@@ -1,4 +1,5 @@
 import { supabaseBrowser } from "@/lib/supabase/client";
+import { colunaFaltando } from "@/lib/lixeiraConfig";
 import type {
   Bruto, ProducaoProjeto, Derivado, Transcricao, SegmentoTranscricao, Momento, Clip, Feedback,
   EditingDna, DnaRegra, DnaReferencia, LegendaPreset, DnaAutoEdit, EditDecision, BrollSugestao,
@@ -7,11 +8,30 @@ import type {
 
 const sb = () => supabaseBrowser();
 
+type Resposta = { data: unknown; error: { message: string } | null };
+
+// Ate a migration 0031 rodar, excluido_em nao existe nas tabelas de Production:
+// a leitura repete sem o filtro em vez de deixar a tela vazia.
+async function semExcluidos<T>(consultar: (filtrar: boolean) => PromiseLike<Resposta>): Promise<T[]> {
+  let resposta = await consultar(true);
+  if (resposta.error && colunaFaltando(resposta.error.message)) resposta = await consultar(false);
+  if (resposta.error) throw resposta.error;
+  return (resposta.data as T[]) ?? [];
+}
+
+// Excluir = mandar para a Lixeira (lib/lixeira.ts restaura ou remove de vez).
+async function moverParaLixeira(tabela: string, id: string): Promise<void> {
+  const { error } = await sb().from(tabela).update({ excluido_em: new Date().toISOString() }).eq("id", id);
+  if (error) throw error;
+}
+
 // ---- Brutos (Inbox) ----
 export async function listarBrutos(userId: string): Promise<Bruto[]> {
-  const { data, error } = await sb().from("producao_brutos").select("*").eq("user_id", userId).order("created_at", { ascending: false });
-  if (error) throw error;
-  return (data as Bruto[]) ?? [];
+  return semExcluidos<Bruto>((filtrar) => {
+    let q = sb().from("producao_brutos").select("*").eq("user_id", userId);
+    if (filtrar) q = q.is("excluido_em", null);
+    return q.order("created_at", { ascending: false });
+  });
 }
 export async function criarBruto(userId: string, patch: Partial<Bruto>): Promise<Bruto> {
   const { data, error } = await sb().from("producao_brutos").insert({ user_id: userId, nome: "Novo bruto", status: "novo", ...patch }).select().single();
@@ -23,8 +43,7 @@ export async function atualizarBruto(id: string, patch: Partial<Bruto>): Promise
   if (error) throw error;
 }
 export async function excluirBruto(id: string): Promise<void> {
-  const { error } = await sb().from("producao_brutos").delete().eq("id", id);
-  if (error) throw error;
+  await moverParaLixeira("producao_brutos", id);
 }
 export async function associarBrutoAoProjeto(userId: string, projetoId: string, brutoId: string): Promise<void> {
   const { error } = await sb().from("producao_projeto_brutos").insert({ user_id: userId, projeto_id: projetoId, bruto_id: brutoId });
@@ -34,14 +53,22 @@ export async function associarBrutoAoProjeto(userId: string, projetoId: string, 
 export async function listarBrutosDoProjeto(projetoId: string): Promise<Bruto[]> {
   const { data, error } = await sb().from("producao_projeto_brutos").select("bruto_id, producao_brutos(*)").eq("projeto_id", projetoId);
   if (error) throw error;
-  return ((data ?? []) as unknown as { producao_brutos: Bruto }[]).map((r) => r.producao_brutos).filter(Boolean);
+  return ((data ?? []) as unknown as { producao_brutos: Bruto }[]).map((r) => r.producao_brutos).filter((b) => b && !b.excluido_em);
 }
 
 // ---- Projetos de producao ----
 export async function listarProducaoProjetos(userId: string): Promise<ProducaoProjeto[]> {
-  const { data, error } = await sb().from("producao_projetos").select("*").eq("user_id", userId).order("ordem", { ascending: false });
+  return semExcluidos<ProducaoProjeto>((filtrar) => {
+    let q = sb().from("producao_projetos").select("*").eq("user_id", userId);
+    if (filtrar) q = q.is("excluido_em", null);
+    return q.order("ordem", { ascending: false });
+  });
+}
+export async function obterProducaoProjeto(id: string): Promise<ProducaoProjeto | null> {
+  const { data, error } = await sb().from("producao_projetos").select("*").eq("id", id).maybeSingle();
   if (error) throw error;
-  return (data as ProducaoProjeto[]) ?? [];
+  const projeto = data as ProducaoProjeto | null;
+  return projeto && !projeto.excluido_em ? projeto : null;
 }
 export async function criarProducaoProjeto(userId: string, titulo: string): Promise<ProducaoProjeto> {
   const { data, error } = await sb().from("producao_projetos").insert({ user_id: userId, titulo, ordem: Date.now() }).select().single();
@@ -53,8 +80,7 @@ export async function atualizarProducaoProjeto(id: string, patch: Partial<Produc
   if (error) throw error;
 }
 export async function excluirProducaoProjeto(id: string): Promise<void> {
-  const { error } = await sb().from("producao_projetos").delete().eq("id", id);
-  if (error) throw error;
+  await moverParaLixeira("producao_projetos", id);
 }
 
 // ---- Derivados ----
@@ -91,9 +117,11 @@ export async function adicionarSegmento(userId: string, transcricaoId: string, p
 
 // ---- Momentos ----
 export async function listarMomentos(brutoId: string): Promise<Momento[]> {
-  const { data, error } = await sb().from("producao_momentos").select("*").eq("bruto_id", brutoId).order("start_ms");
-  if (error) throw error;
-  return (data as Momento[]) ?? [];
+  return semExcluidos<Momento>((filtrar) => {
+    let q = sb().from("producao_momentos").select("*").eq("bruto_id", brutoId);
+    if (filtrar) q = q.is("excluido_em", null);
+    return q.order("start_ms");
+  });
 }
 export async function criarMomento(userId: string, brutoId: string, patch: Partial<Momento>): Promise<Momento> {
   const { data, error } = await sb().from("producao_momentos").insert({ user_id: userId, bruto_id: brutoId, start_ms: 0, end_ms: 0, titulo: "Novo momento", status: "sugerido", ...patch }).select().single();
@@ -105,15 +133,16 @@ export async function atualizarMomento(id: string, patch: Partial<Momento>): Pro
   if (error) throw error;
 }
 export async function excluirMomento(id: string): Promise<void> {
-  const { error } = await sb().from("producao_momentos").delete().eq("id", id);
-  if (error) throw error;
+  await moverParaLixeira("producao_momentos", id);
 }
 
 // ---- Clips ----
 export async function listarClips(projetoId: string): Promise<Clip[]> {
-  const { data, error } = await sb().from("producao_clips").select("*").eq("projeto_id", projetoId).order("created_at", { ascending: false });
-  if (error) throw error;
-  return (data as Clip[]) ?? [];
+  return semExcluidos<Clip>((filtrar) => {
+    let q = sb().from("producao_clips").select("*").eq("projeto_id", projetoId);
+    if (filtrar) q = q.is("excluido_em", null);
+    return q.order("created_at", { ascending: false });
+  });
 }
 export async function criarClip(patch: Omit<Clip, "id" | "created_at">): Promise<Clip> {
   const { data, error } = await sb().from("producao_clips").insert(patch).select().single();
@@ -125,8 +154,7 @@ export async function atualizarClip(id: string, patch: Partial<Clip>): Promise<v
   if (error) throw error;
 }
 export async function excluirClip(id: string): Promise<void> {
-  const { error } = await sb().from("producao_clips").delete().eq("id", id);
-  if (error) throw error;
+  await moverParaLixeira("producao_clips", id);
 }
 
 // ---- Feedback ----
@@ -142,9 +170,11 @@ export async function criarFeedback(userId: string, clipId: string, patch: Parti
 
 // ---- Editing DNA ----
 export async function listarDnas(userId: string): Promise<EditingDna[]> {
-  const { data, error } = await sb().from("producao_editing_dna").select("*").eq("user_id", userId).order("created_at", { ascending: false });
-  if (error) throw error;
-  return (data as EditingDna[]) ?? [];
+  return semExcluidos<EditingDna>((filtrar) => {
+    let q = sb().from("producao_editing_dna").select("*").eq("user_id", userId);
+    if (filtrar) q = q.is("excluido_em", null);
+    return q.order("created_at", { ascending: false });
+  });
 }
 export async function criarDna(userId: string, nome: string): Promise<EditingDna> {
   const { data, error } = await sb().from("producao_editing_dna").insert({ user_id: userId, nome }).select().single();
@@ -156,8 +186,7 @@ export async function atualizarDna(id: string, patch: Partial<EditingDna>): Prom
   if (error) throw error;
 }
 export async function excluirDna(id: string): Promise<void> {
-  const { error } = await sb().from("producao_editing_dna").delete().eq("id", id);
-  if (error) throw error;
+  await moverParaLixeira("producao_editing_dna", id);
 }
 export async function listarRegras(dnaId: string): Promise<DnaRegra[]> {
   const { data, error } = await sb().from("producao_dna_regras").select("*").eq("dna_id", dnaId).order("ordem");
@@ -277,6 +306,15 @@ export async function listarMetricas(publicacaoId: string): Promise<Metrica[]> {
   const { data, error } = await sb().from("producao_metricas").select("*").eq("publicacao_id", publicacaoId).order("captured_at", { ascending: false });
   if (error) throw error;
   return (data as Metrica[]) ?? [];
+}
+// Metricas de varias publicacoes numa consulta so, agrupadas por publicacao (mais recente primeiro).
+export async function listarMetricasDePublicacoes(publicacaoIds: string[]): Promise<Record<string, Metrica[]>> {
+  if (publicacaoIds.length === 0) return {};
+  const { data, error } = await sb().from("producao_metricas").select("*").in("publicacao_id", publicacaoIds).order("captured_at", { ascending: false });
+  if (error) throw error;
+  const mapa: Record<string, Metrica[]> = {};
+  for (const m of (data as Metrica[]) ?? []) (mapa[m.publicacao_id] ??= []).push(m);
+  return mapa;
 }
 export async function adicionarMetrica(userId: string, publicacaoId: string, patch: Partial<Metrica>): Promise<void> {
   const { error } = await sb().from("producao_metricas").insert({ user_id: userId, publicacao_id: publicacaoId, ...patch });

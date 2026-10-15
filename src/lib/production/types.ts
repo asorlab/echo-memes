@@ -5,6 +5,7 @@ export interface Bruto {
   id: string; user_id: string; nome: string; arquivo_url: string | null;
   duracao_seg: number | null; origem: string | null; tamanho_bytes: number | null;
   status: StatusBruto; erro_mensagem: string | null; created_at: string;
+  excluido_em?: string | null; // 0031
 }
 
 export type TipoProjeto = "vlog" | "grwm" | "fashion" | "gaming" | "cover" | "asmr" | "lifestyle" | "outro";
@@ -13,6 +14,7 @@ export interface ProducaoProjeto {
   id: string; user_id: string; titulo: string; tipo: TipoProjeto | null; dna_id: string | null;
   status: StatusProjeto; descricao: string | null; data: string | null; observacoes: string | null;
   projeto_id: string | null; ordem: number; created_at: string;
+  excluido_em?: string | null; // 0031
 }
 
 export type TipoDerivado = "long_edit" | "short" | "reel" | "tiktok" | "youtube_short" | "thumbnail" | "caption" | "subtitle" | "audio" | "proxy" | "transcript" | "other";
@@ -38,6 +40,7 @@ export interface Momento {
   id: string; user_id: string; bruto_id: string; start_ms: number; end_ms: number;
   titulo: string; descricao: string | null; categoria: CategoriaMomento | null;
   score: number | null; reason: string | null; status: StatusMomento; created_at: string;
+  excluido_em?: string | null; // 0031
 }
 
 export type FormatoClip = "tiktok" | "reel" | "short" | "youtube" | "custom";
@@ -47,6 +50,7 @@ export interface Clip {
   id: string; user_id: string; projeto_id: string; bruto_id: string; momento_id: string | null;
   start_ms: number; end_ms: number; nome: string; formato: FormatoClip; aspect_ratio: AspectRatio;
   status: StatusClip; derivado_id: string | null; created_at: string;
+  excluido_em?: string | null; // 0031
 }
 
 export type TipoFeedback = "gostei" | "nao_gostei" | "ajustar";
@@ -56,6 +60,7 @@ export interface Feedback {
 
 export interface EditingDna {
   id: string; user_id: string; nome: string; descricao: string | null; ativo: boolean; created_at: string;
+  excluido_em?: string | null; // 0031
 }
 export type CategoriaDnaRegra = "ritmo" | "jump_cuts" | "silencio" | "legendas" | "zoom" | "transicoes" | "audio" | "cor" | "musica" | "sfx";
 export interface DnaRegra {
