@@ -6,6 +6,7 @@ import {
   ShieldAlert, Gauge, Lightbulb, Plus, Volume2, VolumeX, Mic, MicOff,
 } from "lucide-react";
 import EditableField from "@/components/ui/EditableField";
+import OndeFoiUsado from "@/components/assets/OndeFoiUsado";
 import type {
   Categoria, Emocao, Momento, Formato, FormaUso, AudioPref, Intensidade, Status, Risco, Meme, MemeUso,
 } from "@/lib/types";
@@ -318,12 +319,14 @@ export default function MemeDrawer({ meme, arquivoUrlResolvido, usos, onFechar, 
             </div>
           </Secao>
 
+          <OndeFoiUsado tabela="memes" id={meme.id} />
+
           <details className="group rounded-lg border border-neutral-800">
-            <summary className="cursor-pointer list-none px-3 py-2 text-[11px] font-medium text-neutral-400 hover:text-neutral-200">Mais detalhes (origem, tags, categoria)</summary>
+            <summary className="cursor-pointer list-none px-3 py-2 text-[11px] font-medium text-neutral-400 hover:text-neutral-200">Mais detalhes (origem, tags, marca)</summary>
             <div className="space-y-3 border-t border-neutral-800 px-3 py-3">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">Categoria (legado)</p>
+                  <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-500" title="IveASOR e ASOR viram a marca do item; AIVIL e Geral ficam só como etiqueta (item compartilhado)">Marca / etiqueta</p>
                   <select
                     value={meme.categoria ?? ""}
                     onChange={(e) => onAtualizar({ categoria: (e.target.value || null) as Categoria | null })}

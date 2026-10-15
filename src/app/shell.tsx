@@ -5,6 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import ToastProvider from "@/components/ToastProvider";
+import MarcaProvider from "@/components/marca/MarcaProvider";
+import BuscaGlobal from "@/components/BuscaGlobal";
 import { useUser } from "@/lib/useUser";
 
 export default function Shell({ children }: { children: React.ReactNode }) {
@@ -45,13 +47,16 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <ToastProvider>
-      <div className="flex h-screen w-full overflow-hidden bg-neutral-950 font-sans text-neutral-200" lang="pt-BR">
-        <Sidebar aberta={sidebarAberta} fechar={() => setSidebarAberta(false)} />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <Topbar titulo="ECHO // MEMES" abrirMenu={() => setSidebarAberta(true)} />
-          <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
+      <MarcaProvider>
+        <div className="flex h-screen w-full overflow-hidden bg-neutral-950 font-sans text-neutral-200" lang="pt-BR">
+          <Sidebar aberta={sidebarAberta} fechar={() => setSidebarAberta(false)} />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <Topbar titulo="ECHO // ASSETS" abrirMenu={() => setSidebarAberta(true)} />
+            <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
+          </div>
         </div>
-      </div>
+        <BuscaGlobal />
+      </MarcaProvider>
     </ToastProvider>
   );
 }

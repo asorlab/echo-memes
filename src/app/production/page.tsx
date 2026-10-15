@@ -16,6 +16,9 @@ import {
   listarProducaoProjetos, criarProducaoProjeto, associarBrutoAoProjeto,
 } from "@/lib/production/data";
 import { ROTULO_STATUS_PROJETO, ROTULO_TIPO_PROJETO } from "@/lib/production/rotulos";
+import { useMarca } from "@/components/marca/MarcaProvider";
+import { SeloMarca } from "@/components/marca/SeletorMarca";
+import { marcaDoRegistro } from "@/lib/marca";
 import type { Bruto, ProducaoProjeto, StatusBruto } from "@/lib/production/types";
 
 const ROTULO_STATUS_BRUTO: Record<StatusBruto, string> = {
@@ -65,6 +68,7 @@ export default function ProductionPage() {
   const [enviando, setEnviando] = useState(false);
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [visualizacao, setVisualizacao] = useVisualizacao("production-inbox", "grade");
+  const { passa, campoNovo } = useMarca();
   const inputRef = useRef<HTMLInputElement>(null);
 
   const carregar = useCallback(async () => {
@@ -117,14 +121,14 @@ export default function ProductionPage() {
 
   async function novoProjeto() {
     if (!user) return;
-    const p = await criarProducaoProjeto(user.id, "Novo projeto");
+    const p = await criarProducaoProjeto(user.id, "Novo projeto", campoNovo());
     router.push(`/production/${p.id}`);
   }
 
   async function criarProjetoComSelecionados() {
     if (!user || selecionados.size === 0) return;
     const nomeBase = brutos.find((b) => selecionados.has(b.id))?.nome ?? "Novo projeto";
-    const p = await criarProducaoProjeto(user.id, nomeBase.replace(/\.[^.]+$/, ""));
+    const p = await criarProducaoProjeto(user.id, nomeBase.replace(/\.[^.]+$/, ""), campoNovo());
     await Promise.all(Array.from(selecionados).map((id) => associarBrutoAoProjeto(user.id, p.id, id)));
     setSelecionados(new Set());
     router.push(`/production/${p.id}`);
@@ -202,14 +206,15 @@ export default function ProductionPage() {
               <Plus className="h-4 w-4" /> Novo projeto
             </button>
           </div>
-          {projetos.length === 0 ? (
-            <EmptyState icone={FolderOpen} titulo="Nenhum projeto de produção ainda" descricao="Crie um projeto, ou selecione brutos na Inbox e crie a partir deles." />
+          {projetos.filter((p) => passa(marcaDoRegistro(p.marca_slug))).length === 0 ? (
+            <EmptyState icone={FolderOpen} titulo={projetos.length === 0 ? "Nenhum projeto de produção ainda" : "Nenhuma produção nesta marca"} descricao={projetos.length === 0 ? "Crie um projeto, ou selecione brutos na Inbox e crie a partir deles." : "Troque a marca no menu para ver as outras."} />
           ) : (
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {projetos.map((p) => (
+              {projetos.filter((p) => passa(marcaDoRegistro(p.marca_slug))).map((p) => (
                 <Card key={p.id} className="cursor-pointer p-3 hover:border-neutral-700" onClick={() => router.push(`/production/${p.id}`)}>
                   <div className="mb-1.5 flex items-start justify-between gap-2">
                     <p className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-100">{p.titulo}</p>
+                    <SeloMarca valor={marcaDoRegistro(p.marca_slug)} />
                     <span className="shrink-0 rounded-full border border-neutral-700 px-2 py-0.5 text-[10px] text-neutral-400">{ROTULO_STATUS_PROJETO[p.status]}</span>
                   </div>
                   <p className="text-[11px] text-neutral-500">{p.tipo ? ROTULO_TIPO_PROJETO[p.tipo] : "-"}</p>

@@ -4,10 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Radio, Sparkles, LogOut, X, ChevronDown, AudioLines, ImageIcon, Compass, Lightbulb, Trash2, Rss, FolderKanban, Users,
-  Clapperboard, BarChart3, Dna, Type, Palette, BadgeCheck, ArrowUpRight,
+  Clapperboard, BarChart3, Dna, Type, Palette, BadgeCheck, ArrowUpRight, Home, Search, type LucideIcon,
 } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { ECHO_OS_URL } from "@/lib/sistemas";
+import { GRUPOS_NAV, itemAtivo } from "@/lib/navegacao";
+import { SeletorMarca } from "@/components/marca/SeletorMarca";
+import { EVENTO_ABRIR_BUSCA } from "@/components/BuscaGlobal";
 
 // Atalhos pros outros sistemas do ECHO (mesmo login, outro endereco).
 const OUTROS_SISTEMAS = [
@@ -15,67 +18,13 @@ const OUTROS_SISTEMAS = [
   { nome: "ECHO // LIFE", href: `${ECHO_OS_URL}/life` },
 ];
 
-interface ItemNav {
-  id: string;
-  nome: string;
-  icone: typeof Sparkles;
-  href: string;
-}
-
-interface GrupoNav {
-  id: string;
-  rotulo: string;
-  itens: ItemNav[];
-}
-
-// Agrupamento aprovado no mapa de navegacao (P3, 30/09): LIBRARY/
-// REFERENCE/STUDIO/SYSTEM. Fontes, Brand Assets e Paletas ja existiam como
-// paginas mas nao tinham entrada nenhuma na sidebar (achado da auditoria) —
-// entram aqui pela primeira vez. Templates deixou de ser item proprio: e
-// filtro tipo="template" dentro de Visuais (mesma tabela, ver /visuais).
-// "Refs" nao estava na lista que a Livia aprovou, mas continua existindo
-// (regra de "nada desaparece") — mantive dentro de Reference.
-const GRUPOS: GrupoNav[] = [
-  {
-    id: "library",
-    rotulo: "Library",
-    itens: [
-      { id: "memes", nome: "Memes", icone: Sparkles, href: "/" },
-      { id: "audios", nome: "Áudios", icone: AudioLines, href: "/audios" },
-      { id: "visuais", nome: "Visuais", icone: ImageIcon, href: "/visuais" },
-      { id: "fontes", nome: "Fontes", icone: Type, href: "/fontes" },
-      { id: "brand", nome: "Brand Assets", icone: BadgeCheck, href: "/brand" },
-      { id: "paletas", nome: "Paletas", icone: Palette, href: "/paletas" },
-    ],
-  },
-  {
-    id: "reference",
-    rotulo: "Reference",
-    itens: [
-      { id: "contas", nome: "Contas", icone: Rss, href: "/contas" },
-      { id: "edicoes-ref", nome: "Edits", icone: Compass, href: "/edicoes" },
-      { id: "inspiracoes", nome: "Inspirações", icone: Lightbulb, href: "/inspiracoes" },
-      { id: "refs", nome: "Refs", icone: Users, href: "/refs" },
-    ],
-  },
-  {
-    id: "studio",
-    rotulo: "Studio",
-    itens: [
-      { id: "projetos", nome: "Projetos", icone: FolderKanban, href: "/projetos" },
-      { id: "production", nome: "Production", icone: Clapperboard, href: "/production" },
-      { id: "editing-dna", nome: "Editing DNA", icone: Dna, href: "/editing-dna" },
-      { id: "analytics", nome: "Analytics", icone: BarChart3, href: "/analytics" },
-    ],
-  },
-  {
-    id: "system",
-    rotulo: "System",
-    itens: [
-      { id: "lixeira", nome: "Lixeira", icone: Trash2, href: "/lixeira" },
-    ],
-  },
-];
+// Menu em 7 grupos (lib/navegacao.ts). Nada das telas antigas saiu: so mudou o grupo.
+const ICONE: Record<string, LucideIcon> = {
+  inicio: Home, production: Clapperboard, memes: Sparkles, audios: AudioLines, visuais: ImageIcon, fontes: Type,
+  brand: BadgeCheck, paletas: Palette, contas: Rss, edicoes: Compass, inspiracoes: Lightbulb, refs: Users,
+  projetos: FolderKanban, "editing-dna": Dna, analytics: BarChart3, lixeira: Trash2,
+};
+const GRUPOS = GRUPOS_NAV;
 
 const CHAVE_COLAPSADOS = "echo-assets:grupos-colapsados";
 
@@ -98,7 +47,7 @@ export default function Sidebar({ aberta = false, fechar = () => {} }: SidebarPr
 
   const grupoAtivoId = useMemo(() => {
     const item = GRUPOS.flatMap((g) => g.itens.map((i) => ({ ...i, grupoId: g.id })))
-      .find((i) => pathname === i.href || pathname.startsWith(`${i.href}/`));
+      .find((i) => itemAtivo(pathname, i.href));
     return item?.grupoId ?? null;
   }, [pathname]);
 
@@ -129,6 +78,18 @@ export default function Sidebar({ aberta = false, fechar = () => {} }: SidebarPr
           </button>
         </div>
 
+        <div className="space-y-2 border-b border-neutral-800 px-3 py-3">
+          <SeletorMarca />
+          <button
+            type="button"
+            onClick={() => { window.dispatchEvent(new Event(EVENTO_ABRIR_BUSCA)); fechar(); }}
+            className="flex min-h-[36px] w-full items-center gap-2 rounded-md border border-neutral-800 px-3 text-xs text-neutral-500 hover:border-neutral-700 hover:text-neutral-200"
+          >
+            <Search className="h-3.5 w-3.5" /> Buscar em tudo
+            <kbd className="ml-auto rounded border border-neutral-800 px-1 font-mono text-[10px] text-neutral-600">Ctrl K</kbd>
+          </button>
+        </div>
+
         <nav className="flex-1 space-y-2 overflow-y-auto px-3 py-3">
           {GRUPOS.map((grupo) => {
             const aberto = grupoAtivoId === grupo.id || !colapsados.has(grupo.id);
@@ -148,8 +109,8 @@ export default function Sidebar({ aberta = false, fechar = () => {} }: SidebarPr
                 {aberto && (
                   <div id={painelId} className="space-y-0.5">
                     {grupo.itens.map((item) => {
-                      const Icone = item.icone;
-                      const ativo = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                      const Icone = ICONE[item.id] ?? Sparkles;
+                      const ativo = itemAtivo(pathname, item.href);
                       return (
                         <button
                           key={item.id}

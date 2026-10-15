@@ -70,8 +70,8 @@ export async function obterProducaoProjeto(id: string): Promise<ProducaoProjeto 
   const projeto = data as ProducaoProjeto | null;
   return projeto && !projeto.excluido_em ? projeto : null;
 }
-export async function criarProducaoProjeto(userId: string, titulo: string): Promise<ProducaoProjeto> {
-  const { data, error } = await sb().from("producao_projetos").insert({ user_id: userId, titulo, ordem: Date.now() }).select().single();
+export async function criarProducaoProjeto(userId: string, titulo: string, extra: { marca_slug?: string } = {}): Promise<ProducaoProjeto> {
+  const { data, error } = await sb().from("producao_projetos").insert({ user_id: userId, titulo, ordem: Date.now(), ...extra }).select().single();
   if (error) throw error;
   return data as ProducaoProjeto;
 }
@@ -176,8 +176,8 @@ export async function listarDnas(userId: string): Promise<EditingDna[]> {
     return q.order("created_at", { ascending: false });
   });
 }
-export async function criarDna(userId: string, nome: string): Promise<EditingDna> {
-  const { data, error } = await sb().from("producao_editing_dna").insert({ user_id: userId, nome }).select().single();
+export async function criarDna(userId: string, nome: string, extra: { marca_slug?: string } = {}): Promise<EditingDna> {
+  const { data, error } = await sb().from("producao_editing_dna").insert({ user_id: userId, nome, ...extra }).select().single();
   if (error) throw error;
   return data as EditingDna;
 }

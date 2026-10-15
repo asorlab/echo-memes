@@ -1,6 +1,7 @@
 "use client";
 
-import { Menu } from "lucide-react";
+import { Menu, Search } from "lucide-react";
+import { EVENTO_ABRIR_BUSCA } from "@/components/BuscaGlobal";
 
 interface TopbarProps {
   titulo: string;
@@ -14,6 +15,9 @@ export default function Topbar({ titulo, abrirMenu }: TopbarProps) {
         <Menu className="h-5 w-5" />
       </button>
       <span className="font-mono text-sm font-medium text-neutral-200">{titulo}</span>
+      <button onClick={() => window.dispatchEvent(new Event(EVENTO_ABRIR_BUSCA))} aria-label="Buscar em tudo" className="ml-auto flex h-11 w-11 items-center justify-center text-neutral-400 hover:text-neutral-200">
+        <Search className="h-5 w-5" />
+      </button>
     </header>
   );
 }

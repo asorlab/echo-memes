@@ -9,6 +9,9 @@ import PageHeader from "@/components/ui/PageHeader";
 import Card from "@/components/ui/Card";
 import EmptyState from "@/components/ui/EmptyState";
 import { listarProjetos, criarProjeto, type Projeto, type TipoConteudo } from "@/lib/projetos";
+import { useMarca } from "@/components/marca/MarcaProvider";
+import { SeloMarca } from "@/components/marca/SeletorMarca";
+import { marcaDoRegistro } from "@/lib/marca";
 
 const TIPOS: { id: TipoConteudo; rotulo: string }[] = [
   { id: "vlog", rotulo: "Vlog" }, { id: "grwm", rotulo: "GRWM" }, { id: "gaming", rotulo: "Gaming" },
@@ -26,6 +29,8 @@ export default function ProjetosPage() {
   const [novoNome, setNovoNome] = useState("");
   const [novoTipo, setNovoTipo] = useState<TipoConteudo | null>(null);
   const [criando, setCriando] = useState(false);
+  const { passa, campoNovo } = useMarca();
+  const visiveis = projetos.filter((p) => passa(marcaDoRegistro(p.marcaSlug)));
 
   const carregar = useCallback(async () => {
     if (!user) return;
@@ -40,7 +45,7 @@ export default function ProjetosPage() {
     if (!user || !novoNome.trim()) return;
     setCriando(true);
     try {
-      const projeto = await criarProjeto(user.id, novoNome.trim(), novoTipo);
+      const projeto = await criarProjeto(user.id, novoNome.trim(), novoTipo, campoNovo());
       setNovoNome(""); setNovoTipo(null); setNovoAberto(false);
       router.push(`/projetos/${projeto.id}`);
     } catch {
@@ -92,13 +97,16 @@ export default function ProjetosPage() {
 
       {carregando ? (
         <p className="py-10 text-center text-sm text-neutral-600">Carregando...</p>
-      ) : projetos.length === 0 ? (
-        <EmptyState icone={FolderKanban} titulo="Nenhum projeto ainda" descricao="Crie um projeto pra organizar referências e assets de um conteúdo específico." />
+      ) : visiveis.length === 0 ? (
+        <EmptyState icone={FolderKanban} titulo={projetos.length === 0 ? "Nenhum projeto ainda" : "Nenhum projeto nesta marca"} descricao={projetos.length === 0 ? "Crie um projeto pra organizar referências e assets de um conteúdo específico." : "Troque a marca no menu para ver os outros."} />
       ) : (
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {projetos.map((p) => (
+          {visiveis.map((p) => (
             <Card key={p.id} className="cursor-pointer p-3 hover:border-teal-500/30" onClick={() => router.push(`/projetos/${p.id}`)}>
-              <p className="mb-1 truncate text-sm font-medium text-neutral-100">{p.nome}</p>
+              <div className="mb-1 flex items-center gap-1.5">
+                <p className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-100">{p.nome}</p>
+                <SeloMarca valor={marcaDoRegistro(p.marcaSlug)} />
+              </div>
               <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
                 {p.tipoConteudo && <span className="rounded-full bg-teal-500/10 px-1.5 py-0.5 text-teal-300">{TIPOS.find((t) => t.id === p.tipoConteudo)?.rotulo}</span>}
                 <span className="rounded-full bg-neutral-800 px-1.5 py-0.5 text-neutral-400">{ROTULO_STATUS[p.status] ?? p.status}</span>

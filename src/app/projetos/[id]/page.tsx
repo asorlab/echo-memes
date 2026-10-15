@@ -12,6 +12,8 @@ import {
   buscarNaBiblioteca, atualizarProjeto, excluirProjeto, listarProjetos,
   type ItemProjeto, type ItemBiblioteca, type Projeto, type PapelItem, type TipoConteudo, type StatusProjeto,
 } from "@/lib/projetos";
+import { CampoMarca } from "@/components/marca/SeletorMarca";
+import { marcaDoRegistro } from "@/lib/marca";
 
 const TIPOS: { id: TipoConteudo; rotulo: string }[] = [
   { id: "vlog", rotulo: "Vlog" }, { id: "grwm", rotulo: "GRWM" }, { id: "gaming", rotulo: "Gaming" },
@@ -143,13 +145,14 @@ export default function ProjetoDetalhePage() {
     carregar();
   }
   async function excluir() {
-    if (!window.confirm(`Excluir o projeto "${projeto?.nome}"? Os assets/referências continuam na sua biblioteca.`)) return;
+    if (!window.confirm(`Mover o projeto "${projeto?.nome}" para a Lixeira? Os assets e referências continuam na sua biblioteca.`)) return;
     await excluirProjeto(projetoId);
-    toast("Projeto excluído");
+    toast("Projeto na Lixeira");
     router.push("/projetos");
   }
 
-  if (carregando || !projeto) return <p className="py-10 text-center text-sm text-neutral-600">Carregando...</p>;
+  if (carregando) return <p className="py-10 text-center text-sm text-neutral-500">Carregando...</p>;
+  if (!projeto) return <p className="py-10 text-center text-sm text-neutral-500">Projeto não encontrado (pode estar na Lixeira).</p>;
 
   const referencias = itens.filter((i) => i.papel === "referencia");
   const planejados = itens.filter((i) => i.papel === "planejado");
@@ -172,6 +175,9 @@ export default function ProjetoDetalhePage() {
           {STATUS_OPCOES.map((s) => (
             <button key={s.id} onClick={() => salvar({ status: s.id })} className={`rounded-full border px-2.5 py-1 text-[11px] ${projeto.status === s.id ? "border-teal-500/50 bg-teal-500/10 text-teal-300" : "border-neutral-800 text-neutral-500"}`}>{s.rotulo}</button>
           ))}
+        </div>
+        <div className="mt-3">
+          <CampoMarca valor={marcaDoRegistro(projeto.marcaSlug)} onMudar={(m) => salvar({ marca_slug: m })} />
         </div>
         <div className="mt-3">
           <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">Observações</p>

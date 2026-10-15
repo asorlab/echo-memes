@@ -13,6 +13,8 @@ import Card from "@/components/ui/Card";
 import EmptyState from "@/components/ui/EmptyState";
 import EditableField from "@/components/ui/EditableField";
 import Timecode from "@/components/ui/Timecode";
+import { CampoMarca } from "@/components/marca/SeletorMarca";
+import { marcaDoRegistro } from "@/lib/marca";
 import { formatarTimecode } from "@/lib/timecode";
 import {
   listarBrutosDoProjeto, obterProducaoProjeto, atualizarProducaoProjeto, excluirProducaoProjeto,
@@ -122,6 +124,9 @@ export default function ProductionProjectPage() {
               <option value="">-</option>
               {dnas.map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}
             </select>
+          </div>
+          <div className="col-span-2 sm:col-span-4">
+            <CampoMarca valor={marcaDoRegistro(projeto.marca_slug)} onMudar={(m) => salvar({ marca_slug: m })} />
           </div>
           <div>
             <p className="mb-1 text-[10px] uppercase text-neutral-600">Data</p>

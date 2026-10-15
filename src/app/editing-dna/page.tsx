@@ -17,6 +17,10 @@ import {
 import { buscarNaBiblioteca, TABELAS_ASSET, type ItemBiblioteca } from "@/lib/projetos";
 import { listarCriadoresRadar, type CriadorRadar } from "@/lib/refs";
 import type { EditingDna, DnaRegra, DnaReferencia, DnaAutoEdit, CategoriaDnaRegra } from "@/lib/production/types";
+import { useMarca } from "@/components/marca/MarcaProvider";
+import { CampoMarca, SeloMarca } from "@/components/marca/SeletorMarca";
+import { useAbrirDaUrl } from "@/lib/abrirDaUrl";
+import { marcaDoRegistro } from "@/lib/marca";
 
 const CATEGORIAS: CategoriaDnaRegra[] = ["ritmo", "jump_cuts", "silencio", "legendas", "zoom", "transicoes", "audio", "cor", "musica", "sfx"];
 
@@ -26,6 +30,9 @@ export default function EditingDnaPage() {
   const [dnas, setDnas] = useState<EditingDna[]>([]);
   const [selecionadoId, setSelecionadoId] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
+  const { passa, campoNovo } = useMarca();
+  useAbrirDaUrl(setSelecionadoId);
+  const visiveis = dnas.filter((d) => passa(marcaDoRegistro(d.marca_slug)));
 
   const carregar = useCallback(async () => {
     if (!user) return;
@@ -38,7 +45,7 @@ export default function EditingDnaPage() {
 
   async function novo() {
     if (!user) return;
-    const d = await criarDna(user.id, "Novo DNA");
+    const d = await criarDna(user.id, "Novo DNA", campoNovo());
     setDnas((prev) => [d, ...prev]);
     setSelecionadoId(d.id);
   }
@@ -63,22 +70,23 @@ export default function EditingDnaPage() {
 
       {carregando ? (
         <p className="py-10 text-center text-sm text-neutral-600">Carregando...</p>
-      ) : dnas.length === 0 ? (
-        <EmptyState icone={Dna} titulo="Nenhum Editing DNA ainda" descricao="Crie um conjunto de regras, ex: IVEASOR DNA, COVER DNA, GAMING DNA." />
-      ) : !selecionado ? (
+      ) : selecionado ? (
+        <DnaDetalhe userId={user!.id} dna={selecionado} onVoltar={() => setSelecionadoId(null)} onSalvar={(patch) => { atualizarDna(selecionado.id, patch); setDnas((prev) => prev.map((d) => (d.id === selecionado.id ? { ...d, ...patch } : d))); }} onExcluir={() => excluir(selecionado.id)} />
+      ) : visiveis.length === 0 ? (
+        <EmptyState icone={Dna} titulo={dnas.length === 0 ? "Nenhum Editing DNA ainda" : "Nenhum DNA nesta marca"} descricao={dnas.length === 0 ? "Crie um conjunto de regras, ex: IVEASOR DNA, COVER DNA, GAMING DNA." : "Troque a marca no menu para ver os outros."} />
+      ) : (
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {dnas.map((d) => (
+          {visiveis.map((d) => (
             <Card key={d.id} className="cursor-pointer p-3 hover:border-neutral-700" onClick={() => setSelecionadoId(d.id)}>
               <div className="mb-1 flex items-start justify-between gap-2">
                 <p className="text-sm font-medium text-neutral-100">{d.nome}</p>
+                <SeloMarca valor={marcaDoRegistro(d.marca_slug)} />
                 {!d.ativo && <span className="shrink-0 rounded-full border border-neutral-700 px-2 py-0.5 text-[10px] text-neutral-500">inativo</span>}
               </div>
               <p className="line-clamp-2 text-[11px] text-neutral-500">{d.descricao || "sem descrição"}</p>
             </Card>
           ))}
         </div>
-      ) : (
-        <DnaDetalhe userId={user!.id} dna={selecionado} onVoltar={() => setSelecionadoId(null)} onSalvar={(patch) => { atualizarDna(selecionado.id, patch); setDnas((prev) => prev.map((d) => (d.id === selecionado.id ? { ...d, ...patch } : d))); }} onExcluir={() => excluir(selecionado.id)} />
       )}
     </div>
   );
@@ -157,6 +165,7 @@ function DnaDetalhe({ userId, dna, onVoltar, onSalvar, onExcluir }: {
           </div>
         </div>
         <EditableField value={dna.descricao ?? ""} onSave={(v) => onSalvar({ descricao: v || null })} as="textarea" placeholder="Descrição do que esse DNA representa" displayClassName="text-xs text-neutral-400" />
+        <div className="mt-3"><CampoMarca valor={marcaDoRegistro(dna.marca_slug)} onMudar={(m) => onSalvar({ marca_slug: m })} /></div>
       </Card>
 
       <Card className="mb-4 p-4">

@@ -15,6 +15,7 @@ export interface ProducaoProjeto {
   status: StatusProjeto; descricao: string | null; data: string | null; observacoes: string | null;
   projeto_id: string | null; ordem: number; created_at: string;
   excluido_em?: string | null; // 0031
+  marca_slug?: string | null; // 0032
 }
 
 export type TipoDerivado = "long_edit" | "short" | "reel" | "tiktok" | "youtube_short" | "thumbnail" | "caption" | "subtitle" | "audio" | "proxy" | "transcript" | "other";
@@ -61,6 +62,7 @@ export interface Feedback {
 export interface EditingDna {
   id: string; user_id: string; nome: string; descricao: string | null; ativo: boolean; created_at: string;
   excluido_em?: string | null; // 0031
+  marca_slug?: string | null; // 0032
 }
 export type CategoriaDnaRegra = "ritmo" | "jump_cuts" | "silencio" | "legendas" | "zoom" | "transicoes" | "audio" | "cor" | "musica" | "sfx";
 export interface DnaRegra {

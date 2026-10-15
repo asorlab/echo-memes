@@ -12,6 +12,11 @@ import Card from "@/components/ui/Card";
 import PageHeader from "@/components/ui/PageHeader";
 import EmptyState from "@/components/ui/EmptyState";
 import EditableField from "@/components/ui/EditableField";
+import OndeFoiUsado from "@/components/assets/OndeFoiUsado";
+import { useMarca } from "@/components/marca/MarcaProvider";
+import { CampoMarca, SeloMarca } from "@/components/marca/SeletorMarca";
+import { useAbrirDaUrl } from "@/lib/abrirDaUrl";
+import { marcaDoRegistro, type MarcaSlug } from "@/lib/marca";
 import { extrairDuracaoAudio } from "@/lib/metadados";
 import { sugerirTipoAudio } from "@/lib/classificarAudio";
 import type { Audio, AudioUso, CategoriaSfx, Clima, Licenciamento, Momento, Risco, TipoAudio } from "@/lib/types";
@@ -20,7 +25,7 @@ interface AudioRow {
   id: string; titulo: string; arquivo_url: string | null; tipo: TipoAudio | null; categoria_sfx: CategoriaSfx | null;
   artista: string | null; licenciamento: Licenciamento | null; clima: Clima | null; bpm: number | null;
   momento: Momento | null; risco: Risco | null; duracao_seg: number | null; tags: string[];
-  link_origem: string | null; favorito: boolean; created_at: string;
+  link_origem: string | null; favorito: boolean; created_at: string; marca_slug?: string | null;
 }
 interface AudioUsoRow { id: string; audio_id: string; contexto: string; data: string; }
 
@@ -29,7 +34,7 @@ function mapAudio(r: AudioRow): Audio {
     id: r.id, titulo: r.titulo, arquivoUrl: r.arquivo_url, tipo: r.tipo, categoriaSfx: r.categoria_sfx,
     artista: r.artista, licenciamento: r.licenciamento, clima: r.clima, bpm: r.bpm, momento: r.momento,
     risco: r.risco, duracaoSeg: r.duracao_seg, tags: r.tags ?? [], linkOrigem: r.link_origem,
-    favorito: r.favorito, criadoEm: r.created_at,
+    favorito: r.favorito, criadoEm: r.created_at, marcaSlug: r.marca_slug ?? null,
   };
 }
 // Link do TikTok (tiktok.com ou subdomínio): muda o rótulo para "Usar no TikTok".
@@ -86,6 +91,8 @@ export default function AudiosPage() {
   const [novoUso, setNovoUso] = useState("");
   const [urls, setUrls] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { passa, campoNovo } = useMarca();
+  useAbrirDaUrl(setDrawerId);
 
   const primeiraCarga = useRef(true);
   const carregar = useCallback(async () => {
@@ -122,6 +129,7 @@ export default function AudiosPage() {
         await supabaseBrowser().from("audios").insert({
           user_id: user.id, titulo, arquivo_url: url, tipo: sugestao.tipo, categoria_sfx: sugestao.categoriaSfx,
           licenciamento: "desconhecido",
+          ...campoNovo(),
           ...(metadados ?? {}),
         });
         rotulos.push(TIPOS.find((t) => t.id === sugestao.tipo)?.rotulo ?? sugestao.tipo);
@@ -164,6 +172,7 @@ export default function AudiosPage() {
         user_id: user.id, titulo: g.nome.slice(0, 120), artista: g.artista, tipo: "trend" as TipoAudio, licenciamento: "desconhecido",
         link_origem: g.link || `https://www.tiktok.com/search?q=${encodeURIComponent(`${g.nome} ${g.artista ?? ""}`.trim())}`,
         tags: ["radar"],
+        ...campoNovo(),
       }));
       if (novos.length === 0) { toast("Nenhum som novo em alta no Radar (os que se repetem já estão aqui)."); return; }
       const { error: e2 } = await sb.from("audios").insert(novos);
@@ -187,6 +196,7 @@ export default function AudiosPage() {
     const titulo = musica ? decodeURIComponent(musica[1]).replace(/-/g, " ") : (window.prompt("Nome do áudio:", "")?.trim() || url.hostname.replace(/^www\./, ""));
     const { error } = await supabaseBrowser().from("audios").insert({
       user_id: user.id, titulo: titulo.slice(0, 120), tipo: musica ? "trend" : (tipoAtivo ?? "trend"), licenciamento: "desconhecido", link_origem: url.toString(), tags: [],
+      ...campoNovo(),
     });
     if (error) { toast(`Não consegui salvar: ${error.message}`); return; }
     toast("Áudio salvo pelo link.");
@@ -196,7 +206,7 @@ export default function AudiosPage() {
   async function atualizar(id: string, patch: Partial<{
     titulo: string; tipo: TipoAudio | null; categoria_sfx: CategoriaSfx | null; artista: string | null;
     licenciamento: Licenciamento | null; clima: Clima | null; bpm: number | null; momento: Momento | null;
-    risco: Risco | null; tags: string[]; favorito: boolean;
+    risco: Risco | null; tags: string[]; favorito: boolean; marca_slug: MarcaSlug | null;
   }>) {
     const supabase = supabaseBrowser();
     const { error } = await supabase.from("audios").update(patch).eq("id", id);
@@ -257,6 +267,7 @@ export default function AudiosPage() {
   }, [usos]);
 
   const filtrados = itens.filter((a) => {
+    if (!passa(marcaDoRegistro(a.marcaSlug))) return false;
     if (tipoAtivo && a.tipo !== tipoAtivo) return false;
     if (soFavoritos && !a.favorito) return false;
     if (soLicenciados && a.licenciamento !== "licenciado") return false;
@@ -329,7 +340,10 @@ export default function AudiosPage() {
                     <p className="truncate text-sm font-medium text-neutral-100">{a.titulo}</p>
                     {a.artista && <p className="truncate text-[10px] text-neutral-500">{a.artista}</p>}
                   </div>
-                  {a.favorito && <Star className="h-3.5 w-3.5 shrink-0 text-amber-400" fill="currentColor" />}
+                  <div className="flex shrink-0 items-center gap-1">
+                    <SeloMarca valor={marcaDoRegistro(a.marcaSlug)} />
+                    {a.favorito && <Star className="h-3.5 w-3.5 shrink-0 text-amber-400" fill="currentColor" />}
+                  </div>
                 </div>
                 {a.arquivoUrl && resolverUrl(a.arquivoUrl, urls) && <audio src={resolverUrl(a.arquivoUrl, urls)} controls className="mb-2 h-8 w-full" onClick={(e) => e.stopPropagation()} />}
                 {!a.arquivoUrl && a.linkOrigem && (
@@ -462,6 +476,8 @@ export default function AudiosPage() {
                 <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">Tags</p>
                 <EditableField value={drawerItem.tags.join(", ")} placeholder="tags: pop, drum-and-bass..." onSave={(v) => atualizar(drawerItem.id, { tags: v.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean) })} displayClassName="text-xs text-teal-500/80" />
               </div>
+              <CampoMarca valor={marcaDoRegistro(drawerItem.marcaSlug)} onMudar={(m) => atualizar(drawerItem.id, { marca_slug: m })} />
+              <OndeFoiUsado tabela="audios" id={drawerItem.id} />
               <div>
                 <p className="mb-2 flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-neutral-600"><History className="h-3 w-3" /> Registro de uso</p>
                 {(usosPorAudio[drawerItem.id] ?? []).length === 0 ? (

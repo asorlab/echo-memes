@@ -8,12 +8,18 @@ import { useToast } from "@/components/ToastProvider";
 import EditableField from "@/components/ui/EditableField";
 import { enviarArquivo, resolverUrl, urlsAssinadas } from "@/lib/storage";
 import { FORMATOS_CONTEUDO } from "@/lib/formatos";
+import { useMarca } from "@/components/marca/MarcaProvider";
+import { CampoMarca, SeloMarca } from "@/components/marca/SeletorMarca";
+import { useAbrirDaUrl } from "@/lib/abrirDaUrl";
+import OndeFoiUsado from "@/components/assets/OndeFoiUsado";
+import { marcaDoRegistro } from "@/lib/marca";
 
 interface Edicao {
   id: string; titulo: string; arquivo_url: string | null; link_origem: string | null;
   plataforma: string | null; criador: string | null; ideia_uso: string | null;
   caracteristicas: string[]; status: string | null; formato_conteudo: string[];
   tags: string[]; favorito: boolean; created_at: string;
+  marca_slug?: string | null;
 }
 
 const CARACTERISTICAS = [
@@ -77,9 +83,12 @@ export default function EdicoesPage() {
 
   useEffect(() => { carregar(); }, [carregar]);
 
+  const { passa, campoNovo } = useMarca();
+  useAbrirDaUrl(setDrawerId);
+
   async function adicionar() {
     if (!user || !novoLink.trim()) return;
-    const { error } = await supabaseBrowser().from("edicoes_referencia").insert({ user_id: user.id, titulo: "Nova referência", link_origem: novoLink.trim() });
+    const { error } = await supabaseBrowser().from("edicoes_referencia").insert({ user_id: user.id, titulo: "Nova referência", link_origem: novoLink.trim(), ...campoNovo() });
     if (error) { toast("Erro ao adicionar"); return; }
     setNovoLink("");
     carregar();
@@ -92,7 +101,7 @@ export default function EdicoesPage() {
       for (const arquivo of Array.from(arquivos)) {
         const url = await enviarArquivo("edicoes_referencia", user.id, arquivo);
         const titulo = arquivo.name.replace(/\.[^.]+$/, "").slice(0, 60) || "Nova referência";
-        const { error } = await supabaseBrowser().from("edicoes_referencia").insert({ user_id: user.id, titulo, arquivo_url: url });
+        const { error } = await supabaseBrowser().from("edicoes_referencia").insert({ user_id: user.id, titulo, arquivo_url: url, ...campoNovo() });
         if (error) throw error;
       }
       toast(arquivos.length > 1 ? `${arquivos.length} referências adicionadas` : "Referência adicionada");
@@ -151,6 +160,7 @@ export default function EdicoesPage() {
   }, [timestamps]);
 
   const filtrados = itens.filter((e) => {
+    if (!passa(marcaDoRegistro(e.marca_slug))) return false;
     if (filtro === "favoritos" && !e.favorito) return false;
     if (filtro === "quero_testar" && e.status !== "quero_testar") return false;
     if (filtro === "testado" && e.status !== "testado") return false;
@@ -255,7 +265,10 @@ export default function EdicoesPage() {
                     </span>
                   )}
                 </div>
-                <p className="truncate text-xs font-medium text-neutral-200 group-hover:text-neutral-100">{e.titulo}</p>
+                <div className="flex items-center gap-1">
+                  <p className="min-w-0 flex-1 truncate text-xs font-medium text-neutral-200 group-hover:text-neutral-100">{e.titulo}</p>
+                  <SeloMarca valor={marcaDoRegistro(e.marca_slug)} />
+                </div>
                 {(e.criador || e.link_origem) && (
                   <p className="truncate text-[10px] text-neutral-600">{e.criador || dominio(e.link_origem!)}</p>
                 )}
@@ -336,6 +349,8 @@ export default function EdicoesPage() {
                 <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">Tags</p>
                 <EditableField value={drawerItem.tags.join(", ")} placeholder="tags: ritmo, color, transicao..." onSave={(v) => atualizar(drawerItem.id, { tags: v.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean) })} displayClassName="text-xs text-teal-500/80" />
               </div>
+              <CampoMarca valor={marcaDoRegistro(drawerItem.marca_slug)} onMudar={(m) => atualizar(drawerItem.id, { marca_slug: m })} />
+              <OndeFoiUsado tabela="edicoes_referencia" id={drawerItem.id} />
 
               <div>
                 <p className="mb-2 flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-neutral-600"><Clock className="h-3 w-3" /> Trechos marcados</p>

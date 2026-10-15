@@ -43,6 +43,8 @@ export interface Meme {
 
   corteInicio: number | null;
   corteFim: number | null;
+
+  marcaSlug?: string | null; // 0032; categoria continua sendo a etiqueta
 }
 
 export interface MemeUso {
@@ -74,6 +76,7 @@ export interface Audio {
   linkOrigem: string | null;
   favorito: boolean;
   criadoEm: string;
+  marcaSlug?: string | null; // 0032
 }
 
 export interface AudioUso {

@@ -12,6 +12,11 @@ import PageHeader from "@/components/ui/PageHeader";
 import EmptyState from "@/components/ui/EmptyState";
 import EditableField from "@/components/ui/EditableField";
 import { extrairMetadadosArquivo } from "@/lib/metadados";
+import OndeFoiUsado from "@/components/assets/OndeFoiUsado";
+import { useMarca } from "@/components/marca/MarcaProvider";
+import { CampoMarca, SeloMarca } from "@/components/marca/SeletorMarca";
+import { useAbrirDaUrl } from "@/lib/abrirDaUrl";
+import { marcaDoRegistro, type MarcaSlug } from "@/lib/marca";
 
 type TipoVisual = "overlay" | "transicao" | "textura" | "png_elemento" | "preset_lut" | "b_roll" | "green_screen" | "gif" | "template";
 type AppCompativel = "capcut" | "premiere" | "davinci" | "lut_generico" | "outro";
@@ -22,11 +27,13 @@ interface Visual {
   id: string; titulo: string; arquivoUrl: string | null; linkOrigem: string | null; tipo: TipoVisual | null;
   transparente: boolean | null; appCompativel: AppCompativel | null; estilo: EstiloVisual | null;
   momento: Momento | null; duracaoSeg: number | null; tags: string[]; favorito: boolean; criadoEm: string;
+  marcaSlug: string | null;
 }
 interface VisualRow {
   id: string; titulo: string; arquivo_url: string | null; link_origem: string | null; tipo: TipoVisual | null;
   transparente: boolean | null; app_compativel: AppCompativel | null; estilo: EstiloVisual | null;
   momento: Momento | null; duracao_seg: number | null; tags: string[]; favorito: boolean; created_at: string;
+  marca_slug?: string | null;
 }
 interface VisualUso { id: string; visualId: string; contexto: string; data: string; }
 interface VisualUsoRow { id: string; visual_id: string; contexto: string; data: string; }
@@ -36,6 +43,7 @@ function mapVisual(r: VisualRow): Visual {
     id: r.id, titulo: r.titulo, arquivoUrl: r.arquivo_url, linkOrigem: r.link_origem, tipo: r.tipo,
     transparente: r.transparente, appCompativel: r.app_compativel, estilo: r.estilo, momento: r.momento,
     duracaoSeg: r.duracao_seg, tags: r.tags ?? [], favorito: r.favorito, criadoEm: r.created_at,
+    marcaSlug: r.marca_slug ?? null,
   };
 }
 function mapUso(r: VisualUsoRow): VisualUso {
@@ -96,6 +104,8 @@ export default function VisuaisPage() {
   const [novoUso, setNovoUso] = useState("");
   const [urls, setUrls] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { passa, campoNovo } = useMarca();
+  useAbrirDaUrl(setDrawerId);
 
   const primeiraCarga = useRef(true);
   const carregar = useCallback(async () => {
@@ -128,7 +138,7 @@ export default function VisuaisPage() {
         ]);
         const titulo = arquivo.name.replace(/\.[^.]+$/, "").slice(0, 60) || "Novo visual";
         await supabaseBrowser().from("visuais").insert({
-          user_id: user.id, titulo, arquivo_url: url, tipo: tipoAtivo ?? "overlay", ...(metadados ?? {}),
+          user_id: user.id, titulo, arquivo_url: url, tipo: tipoAtivo ?? "overlay", ...campoNovo(), ...(metadados ?? {}),
         });
       }
       toast(arquivos.length > 1 ? `${arquivos.length} adicionados` : "Adicionado");
@@ -143,6 +153,7 @@ export default function VisuaisPage() {
   async function atualizar(id: string, patch: Partial<{
     titulo: string; tipo: TipoVisual | null; transparente: boolean | null; app_compativel: AppCompativel | null;
     estilo: EstiloVisual | null; momento: Momento | null; tags: string[]; favorito: boolean; link_origem: string | null;
+    marca_slug: MarcaSlug | null;
   }>) {
     const supabase = supabaseBrowser();
     const { error } = await supabase.from("visuais").update(patch).eq("id", id);
@@ -196,6 +207,7 @@ export default function VisuaisPage() {
   }, [usos]);
 
   const filtrados = itens.filter((v) => {
+    if (!passa(marcaDoRegistro(v.marcaSlug))) return false;
     if (tipoAtivo && v.tipo !== tipoAtivo) return false;
     if (soFavoritos && !v.favorito) return false;
     if (!busca.trim()) return true;
@@ -249,7 +261,10 @@ export default function VisuaisPage() {
               <Card key={v.id} className="cursor-pointer p-3 hover:border-teal-500/30" onClick={() => setDrawerId(v.id)}>
                 <div className="mb-1 flex items-start justify-between gap-2">
                   <p className="min-w-0 truncate text-sm font-medium text-neutral-100">{v.titulo}</p>
-                  {v.favorito && <Star className="h-3.5 w-3.5 shrink-0 text-amber-400" fill="currentColor" />}
+                  <div className="flex shrink-0 items-center gap-1">
+                    <SeloMarca valor={marcaDoRegistro(v.marcaSlug)} />
+                    {v.favorito && <Star className="h-3.5 w-3.5 shrink-0 text-amber-400" fill="currentColor" />}
+                  </div>
                 </div>
                 {v.arquivoUrl && resolverUrl(v.arquivoUrl, urls) && (
                   ehVideo(v.arquivoUrl) ? (
@@ -355,6 +370,8 @@ export default function VisuaisPage() {
                 <p className="mb-1 text-[10px] uppercase tracking-wide text-neutral-600">Tags</p>
                 <EditableField value={drawerItem.tags.join(", ")} placeholder="tags: escuro, urbano..." onSave={(v) => atualizar(drawerItem.id, { tags: v.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean) })} displayClassName="text-xs text-teal-500/80" />
               </div>
+              <CampoMarca valor={marcaDoRegistro(drawerItem.marcaSlug)} onMudar={(m) => atualizar(drawerItem.id, { marca_slug: m })} />
+              <OndeFoiUsado tabela="visuais" id={drawerItem.id} />
 
               <div>
                 <p className="mb-2 flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-neutral-600"><History className="h-3 w-3" /> Registro de uso</p>

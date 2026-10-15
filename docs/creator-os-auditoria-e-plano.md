@@ -263,6 +263,8 @@ Convenção: toda migration é **aditiva** (`add column if not exists`, tabela n
 - **Aceite**: excluir um bruto manda para a Lixeira. Restaurar volta. Excluir de vez remove o arquivo do bucket. Projetos excluídos aparecem na Lixeira. Momento aceita `12:41`.
 
 ### Fase 1: marca, navegação, busca global, relacionamentos
+
+> **Feito em 15/10/2026 (migration 0032).** Ajustes em relação ao plano abaixo: as duas marcas ficaram no código (`lib/marca.ts`), sem tabela `marcas`; `aivil` ficou só como etiqueta (decisão da Livia); a busca roda em paralelo pelo PostgREST (sem RPC nova, então funciona sem SQL); "Onde foi usado" lê `projeto_itens` e `producao_dna_referencias` direto (sem view). O vínculo `producao_projetos.os_card_id` foi para a Fase 6, junto com o calendário que vai usá-lo.
 - Tabela `marcas`, `marca_slug` nas tabelas listadas e backfill (seção 4.3). Seletor global.
 - Sidebar com os 7 grupos. `/inicio` (Visão Geral).
 - `Ctrl+K` com a RPC `buscar_global`.

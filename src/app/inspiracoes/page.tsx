@@ -18,6 +18,7 @@ const config: AssetLibraryConfig = {
   tituloPadrao: "Nova inspiração",
   filtroPrincipal: "tipo_inspiracao",
   filtroSecundario: "marca",
+  etiquetaMarca: "marca", // IveAsor e ASOR.lab viram a marca global; AIVIL e Geral ficam como etiqueta
   camposDrawer: [
     { key: "marca", label: "Marca", tipo: "chips", opcoes: MARCAS },
     {

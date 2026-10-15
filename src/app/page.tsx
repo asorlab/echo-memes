@@ -17,6 +17,10 @@ import Card from "@/components/ui/Card";
 import Modal from "@/components/ui/Modal";
 import PageHeader from "@/components/ui/PageHeader";
 import EmptyState from "@/components/ui/EmptyState";
+import { useMarca } from "@/components/marca/MarcaProvider";
+import { SeloMarca } from "@/components/marca/SeletorMarca";
+import { useAbrirDaUrl } from "@/lib/abrirDaUrl";
+import { etiquetaDaMarca, marcaDaEtiqueta, marcaDoRegistro } from "@/lib/marca";
 import type {
   Categoria, Emocao, Momento, Formato, FormaUso, AudioPref, Intensidade, Status, Risco, Orientacao, Meme, MemeUso,
 } from "@/lib/types";
@@ -30,6 +34,7 @@ interface MemeRow {
   favorito: boolean; status: Status; risco: Risco | null;
   duracao_seg: number | null; orientacao: Orientacao | null; tem_audio: boolean | null; tem_fala: boolean | null;
   corte_inicio: number | null; corte_fim: number | null;
+  marca_slug?: string | null;
 }
 
 interface MemeUsoRow {
@@ -52,6 +57,7 @@ function mapMeme(r: MemeRow): Meme {
     favorito: r.favorito, status: r.status, risco: r.risco,
     duracaoSeg: r.duracao_seg, orientacao: r.orientacao, temAudio: r.tem_audio, temFala: r.tem_fala,
     corteInicio: r.corte_inicio, corteFim: r.corte_fim,
+    marcaSlug: r.marca_slug ?? null,
   };
 }
 function mapUso(r: MemeUsoRow): MemeUso {
@@ -104,6 +110,7 @@ type AbaAdicionar = "tiktok" | "x" | "manual";
 export default function MemesPage() {
   const { user } = useUser();
   const toast = useToast();
+  const { marca, disponivel, passa, campoNovo } = useMarca();
   const [memes, setMemes] = useState<Meme[]>([]);
   const [usos, setUsos] = useState<MemeUso[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -153,10 +160,17 @@ export default function MemesPage() {
     if (alvo && /^https:\/\/(www\.)?tiktok\.com\/@[\w.]+\/?$/i.test(alvo)) { setUrlDoRadar(alvo); setAbaAdicionar("tiktok"); setModalAberto(true); }
   }, []);
 
+  useAbrirDaUrl(setDrawerId);
+
+  // Meme novo nasce na marca selecionada: grava a etiqueta antiga (categoria) e a marca juntas.
+  function marcaDoNovo() {
+    return marca === "todas" ? {} : { categoria: etiquetaDaMarca(marca), ...campoNovo() };
+  }
+
   async function adicionar() {
     if (!user) return;
     const supabase = supabaseBrowser();
-    const { error } = await supabase.from("memes").insert({ user_id: user.id, titulo: "Novo meme", explicacao: "" });
+    const { error } = await supabase.from("memes").insert({ user_id: user.id, titulo: "Novo meme", explicacao: "", ...marcaDoNovo() });
     if (error) { toast("Erro ao criar"); return; }
     setModalAberto(false);
     carregar();
@@ -171,7 +185,9 @@ export default function MemesPage() {
     corte_inicio: number | null; corte_fim: number | null;
   }>) {
     const supabase = supabaseBrowser();
-    const { error } = await supabase.from("memes").update(patch).eq("id", id);
+    // Categoria e a etiqueta da marca: iveasor e asor viram marca; aivil e geral, compartilhado.
+    const comMarca = disponivel && "categoria" in patch ? { ...patch, marca_slug: marcaDaEtiqueta(patch.categoria) } : patch;
+    const { error } = await supabase.from("memes").update(comMarca).eq("id", id);
     if (error) { toast("Erro ao salvar"); return; }
     carregar();
   }
@@ -288,6 +304,7 @@ export default function MemesPage() {
         tags: info.autor ? [info.autor.toLowerCase()] : [],
         plataforma: "x",
         criador: info.autor || null,
+        ...marcaDoNovo(),
         ...(metadados ? { duracao_seg: Math.round(metadados.duracao * 10) / 10, orientacao: metadados.orientacao } : {}),
       });
       if (error) { toast("Erro ao salvar o meme"); return; }
@@ -310,6 +327,7 @@ export default function MemesPage() {
   }, [usos]);
 
   const filtrados = memes.filter((m) => {
+    if (!passa(marcaDoRegistro(m.marcaSlug, m.categoria))) return false;
     if (emocaoAtiva && m.emocao !== emocaoAtiva) return false;
     const usosDoMeme = usosPorMeme[m.id] ?? [];
     if (filtroRapido === "reacoes" && !m.emocao) return false;
@@ -489,6 +507,7 @@ export default function MemesPage() {
                     )}
                   </div>
                   <div className="pointer-events-none absolute right-1.5 top-1.5 flex flex-col items-end gap-1">
+                    <SeloMarca valor={marcaDoRegistro(m.marcaSlug, m.categoria)} />
                     {m.favorito && <Star className="h-3.5 w-3.5 text-amber-400" fill="currentColor" />}
                   </div>
                   <div className="pointer-events-none absolute bottom-1.5 left-1.5 flex flex-wrap gap-1">

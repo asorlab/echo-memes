@@ -10,6 +10,11 @@ import Card from "@/components/ui/Card";
 import PageHeader from "@/components/ui/PageHeader";
 import EmptyState from "@/components/ui/EmptyState";
 import EditableField from "@/components/ui/EditableField";
+import { useMarca } from "@/components/marca/MarcaProvider";
+import { CampoMarca, SeloMarca } from "@/components/marca/SeletorMarca";
+import OndeFoiUsado from "@/components/assets/OndeFoiUsado";
+import { useAbrirDaUrl } from "@/lib/abrirDaUrl";
+import { etiquetaDaMarca, marcaDaEtiqueta, marcaDoRegistro, type MarcaSlug } from "@/lib/marca";
 
 export interface OpcaoCampo { id: string; rotulo: string }
 export interface CampoConfig {
@@ -45,6 +50,9 @@ export interface AssetLibraryConfig {
   filtroSecundario?: string;
   // Acoes extras no fim da gaveta (ex.: "Virar ideia no ECHO OS").
   acoesDrawer?: (item: Registro, recarregar: () => void) => ReactNode;
+  // Campo antigo que ja guarda a marca como etiqueta (Inspiracoes: "marca"). Ele continua
+  // sendo o controle da gaveta e alimenta marca_slug; sem ele, a gaveta mostra o campo Marca.
+  etiquetaMarca?: string;
 }
 
 export interface Registro {
@@ -71,6 +79,7 @@ function ehAudio(url: string): boolean {
 export default function AssetLibrary({ config }: { config: AssetLibraryConfig }) {
   const { user } = useUser();
   const toast = useToast();
+  const { marca, disponivel, passa, campoNovo } = useMarca();
   const [itens, setItens] = useState<Registro[]>([]);
   const [usos, setUsos] = useState<Registro[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -107,14 +116,17 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  // ?abrir=<id> abre a gaveta do item (link que vai junto quando o item vira
-  // ideia no ECHO OS, pra voltar direto nele).
-  useEffect(() => {
-    try {
-      const id = new URLSearchParams(window.location.search).get("abrir");
-      if (id) setDrawerId(id);
-    } catch { /* ignora */ }
-  }, []);
+  // ?abrir=<id> abre a gaveta do item (link da busca global, ou o que vai junto
+  // quando o item vira ideia no ECHO OS, pra voltar direto nele).
+  useAbrirDaUrl(setDrawerId);
+
+  // Item novo nasce na marca selecionada (em "Todas", compartilhado).
+  function marcaDoNovo(): Record<string, unknown> {
+    const base = campoNovo();
+    if (config.etiquetaMarca && marca !== "todas") return { ...base, [config.etiquetaMarca]: etiquetaDaMarca(marca) };
+    return base;
+  }
+  const marcaDe = (it: Registro): MarcaSlug | null => marcaDoRegistro(it.marca_slug, config.etiquetaMarca ? it[config.etiquetaMarca] : undefined);
 
   async function adicionarArquivos(arquivos: FileList) {
     if (!user) return;
@@ -129,6 +141,7 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
         await supabaseBrowser().from(config.tabela).insert({
           user_id: user.id, titulo, arquivo_url: url,
           ...(config.filtroFixo ? { [config.filtroFixo.campo]: config.filtroFixo.valor } : {}),
+          ...marcaDoNovo(),
           ...(metadados ?? {}),
         });
       }
@@ -146,6 +159,7 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
     const { error } = await supabaseBrowser().from(config.tabela).insert({
       user_id: user.id, titulo: config.tituloPadrao, link_origem: novoLink.trim(),
       ...(config.filtroFixo ? { [config.filtroFixo.campo]: config.filtroFixo.valor } : {}),
+      ...marcaDoNovo(),
     });
     if (error) { toast("Erro ao adicionar"); return; }
     setNovoLink("");
@@ -154,6 +168,10 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
   }
 
   async function atualizar(id: string, patch: Record<string, unknown>) {
+    // Mudou a etiqueta antiga (iveasor/asor/aivil/geral): a marca acompanha. aivil e geral = compartilhado.
+    if (disponivel && config.etiquetaMarca && config.etiquetaMarca in patch) {
+      patch = { ...patch, marca_slug: marcaDaEtiqueta(patch[config.etiquetaMarca] as string | null) };
+    }
     const { error } = await supabaseBrowser().from(config.tabela).update(patch).eq("id", id);
     if (error) { toast("Erro ao salvar"); return; }
     carregar();
@@ -210,6 +228,7 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
   const opcoesFiltro2 = config.filtroSecundario ? config.camposDrawer.find((c) => c.key === config.filtroSecundario)?.opcoes ?? [] : [];
 
   const filtrados = itens.filter((it) => {
+    if (!passa(marcaDe(it))) return false;
     if (filtroAtivo && config.filtroPrincipal && it[config.filtroPrincipal] !== filtroAtivo) return false;
     if (filtro2Ativo && config.filtroSecundario && it[config.filtroSecundario] !== filtro2Ativo) return false;
     if (soFavoritos && !it.favorito) return false;
@@ -377,7 +396,10 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
               <Card key={it.id} className="cursor-pointer p-3 hover:border-teal-500/30" onClick={() => setDrawerId(it.id)}>
                 <div className="mb-1 flex items-start justify-between gap-2">
                   <p className="min-w-0 truncate text-sm font-medium text-neutral-100">{it.titulo}</p>
-                  {it.favorito && <Star className="h-3.5 w-3.5 shrink-0 text-amber-400" fill="currentColor" />}
+                  <div className="flex shrink-0 items-center gap-1">
+                    <SeloMarca valor={marcaDe(it)} />
+                    {it.favorito && <Star className="h-3.5 w-3.5 shrink-0 text-amber-400" fill="currentColor" />}
+                  </div>
                 </div>
                 {url && ehAudio(url) && <audio src={url} controls className="mb-2 h-8 w-full" onClick={(e) => e.stopPropagation()} />}
                 {url && ehVideo(url) && <video src={url} muted playsInline preload="metadata" className="mb-2 h-28 w-full rounded object-cover" />}
@@ -448,7 +470,13 @@ export default function AssetLibrary({ config }: { config: AssetLibraryConfig })
                 </div>
               ))}
 
+              {!config.etiquetaMarca && (
+                <CampoMarca valor={marcaDe(drawerItem)} onMudar={(m) => atualizar(drawerItem.id, { marca_slug: m })} />
+              )}
+
               {config.acoesDrawer?.(drawerItem, carregar)}
+
+              <OndeFoiUsado tabela={config.tabela} id={drawerItem.id} />
 
               {config.tabelaUsos && (
                 <div>

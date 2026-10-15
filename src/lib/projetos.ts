@@ -13,6 +13,7 @@ export interface Projeto {
   observacoes: string | null;
   dataPrevista: string | null;
   criadoEm: string;
+  marcaSlug: string | null; // 0032
 }
 
 // Tabelas que contam como "asset" (planejado/usado) vs "referencia" no
@@ -54,6 +55,7 @@ function mapProjeto(r: Record<string, unknown>): Projeto {
     observacoes: (r.observacoes as string) ?? null,
     dataPrevista: (r.data_prevista as string) ?? null,
     criadoEm: r.created_at as string,
+    marcaSlug: (r.marca_slug as string) ?? null,
   };
 }
 
@@ -64,15 +66,16 @@ export async function listarProjetos(userId: string): Promise<Projeto[]> {
   return (data ?? []).map(mapProjeto);
 }
 
-export async function criarProjeto(userId: string, nome: string, tipoConteudo: TipoConteudo | null): Promise<Projeto> {
+export async function criarProjeto(userId: string, nome: string, tipoConteudo: TipoConteudo | null, extra: { marca_slug?: string } = {}): Promise<Projeto> {
   const { data, error } = await supabaseBrowser()
-    .from("projetos").insert({ user_id: userId, nome, tipo_conteudo: tipoConteudo }).select("*").single();
+    .from("projetos").insert({ user_id: userId, nome, tipo_conteudo: tipoConteudo, ...extra }).select("*").single();
   if (error) throw error;
   return mapProjeto(data);
 }
 
 export async function atualizarProjeto(id: string, patch: Partial<{
   nome: string; tipo_conteudo: TipoConteudo | null; status: StatusProjeto; observacoes: string | null; data_prevista: string | null;
+  marca_slug: string | null;
 }>): Promise<void> {
   const { error } = await supabaseBrowser().from("projetos").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", id);
   if (error) throw error;
