@@ -31,7 +31,9 @@ test("textos sem travessao", () => {
 test("toda tabela de Production na Lixeira ganha excluido_em em alguma migration", () => {
   const sql = readdirSync("supabase/migrations").map((a) => readFileSync(`supabase/migrations/${a}`, "utf8")).join("\n");
   for (const t of tabelas.filter((n) => n.startsWith("producao_"))) {
-    assert.match(sql, new RegExp(`alter table ${t}\\s+add column if not exists excluido_em`), `${t} sem excluido_em`);
+    const viaAlter = new RegExp(`alter table ${t}\\s+add column if not exists excluido_em`).test(sql);
+    const naCriacao = new RegExp(`create table if not exists ${t} \\([^;]*excluido_em timestamptz`).test(sql);
+    assert.ok(viaAlter || naCriacao, `${t} sem excluido_em`);
   }
 });
 

@@ -6,6 +6,21 @@ export interface Bruto {
   duracao_seg: number | null; origem: string | null; tamanho_bytes: number | null;
   status: StatusBruto; erro_mensagem: string | null; created_at: string;
   excluido_em?: string | null; // 0031
+  // 0033: original no PC, nuvem com proxy e miniaturas
+  sessao_id?: string | null; caminho_local?: string | null; hash_arquivo?: string | null;
+  proxy_url?: string | null; miniatura_url?: string | null; sprite_url?: string | null;
+  metadados?: MetadadosBruto | null;
+}
+export interface MetadadosBruto {
+  duracao_seg: number | null; largura: number | null; altura: number | null; fps: number | null;
+  codec_video: string | null; codec_audio: string | null; tem_audio: boolean; canais_audio: number | null;
+  bitrate_kbps: number | null; orientacao: "vertical" | "horizontal" | null;
+}
+
+export type TipoSessao = "live" | "gameplay" | "vlog" | "asor_3d" | "bastidor" | "outro";
+export interface Sessao {
+  id: string; user_id: string; nome: string; data: string; tipo: TipoSessao; plataforma: string | null;
+  marca_slug: string | null; notas: string | null; pasta_local: string | null; excluido_em: string | null; created_at: string;
 }
 
 export type TipoProjeto = "vlog" | "grwm" | "fashion" | "gaming" | "cover" | "asmr" | "lifestyle" | "outro";
@@ -98,13 +113,18 @@ export interface BrollSugestao {
   status: StatusBroll; created_at: string;
 }
 
-export type TipoJob = "transcribe" | "analyze" | "detect_moments" | "render_clip" | "render_long" | "captions" | "normalize_audio" | "tracking" | "export";
+export type TipoJob = "ingest" | "transcribe" | "analyze" | "detect_moments" | "render_clip" | "render_long" | "captions" | "normalize_audio" | "tracking" | "export";
 export type StatusJob = "queued" | "processing" | "completed" | "failed" | "cancelled";
 export interface ProducaoJob {
   id: string; user_id: string; projeto_id: string | null; tipo: TipoJob; status: StatusJob;
   progresso: number; erro_mensagem: string | null; referencia_tabela: string | null; referencia_id: string | null;
   created_at: string; started_at: string | null; finished_at: string | null;
+  // 0033
+  tentativas?: number; max_tentativas?: number; proximo_em?: string; worker_id?: string | null;
+  heartbeat_em?: string | null; payload?: Record<string, unknown>; resultado?: Record<string, unknown> | null;
 }
+export interface JobLog { id: number; job_id: string; nivel: "info" | "aviso" | "erro"; mensagem: string; created_at: string }
+export interface WorkerStatus { worker_id: string; visto_em: string; pasta: string | null; versao: string | null; detalhe: Record<string, unknown> | null }
 
 export type Plataforma = "tiktok" | "instagram" | "youtube" | "outro";
 export interface Publicacao {

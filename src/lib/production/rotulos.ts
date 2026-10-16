@@ -1,6 +1,31 @@
 // Rotulos em pt-BR dos valores guardados em ingles no banco (0026). O valor
 // gravado nao muda; so o que aparece na tela. Teste: scripts/testes/rotulos.test.mjs
-import type { CategoriaMomento, FormatoClip, StatusClip, StatusMomento, StatusProjeto, TipoFeedback, TipoProjeto, Plataforma } from "./types";
+import type {
+  CategoriaMomento, FormatoClip, StatusClip, StatusMomento, StatusProjeto, TipoFeedback, TipoProjeto, Plataforma,
+  TipoSessao, TipoJob, StatusJob, StatusBruto,
+} from "./types";
+
+export const TIPOS_SESSAO: TipoSessao[] = ["live", "gameplay", "vlog", "asor_3d", "bastidor", "outro"];
+export const ROTULO_TIPO_SESSAO: Record<TipoSessao, string> = {
+  live: "Live", gameplay: "Gameplay", vlog: "Vlog", asor_3d: "Produção 3D", bastidor: "Bastidor", outro: "Outro",
+};
+
+export const TIPOS_JOB: TipoJob[] = ["ingest", "transcribe", "analyze", "detect_moments", "render_clip", "render_long", "captions", "normalize_audio", "tracking", "export"];
+export const ROTULO_TIPO_JOB: Record<TipoJob, string> = {
+  ingest: "Preparar bruto", transcribe: "Transcrever", analyze: "Analisar", detect_moments: "Sugerir momentos",
+  render_clip: "Gerar corte", render_long: "Gerar vídeo longo", captions: "Legendas", normalize_audio: "Ajustar áudio",
+  tracking: "Rastrear", export: "Exportar",
+};
+
+export const STATUS_JOB: StatusJob[] = ["queued", "processing", "completed", "failed", "cancelled"];
+export const ROTULO_STATUS_JOB: Record<StatusJob, string> = {
+  queued: "Na fila", processing: "Rodando", completed: "Concluído", failed: "Falhou", cancelled: "Cancelado",
+};
+
+export const STATUS_BRUTO: StatusBruto[] = ["novo", "em_projeto", "processando", "pronto", "erro"];
+export const ROTULO_STATUS_BRUTO: Record<StatusBruto, string> = {
+  novo: "Sem produção", em_projeto: "Em produção", processando: "Preparando", pronto: "Pronto", erro: "Erro",
+};
 
 export const CATEGORIAS_MOMENTO: CategoriaMomento[] = ["hook", "engracado", "fashion", "grwm", "historia", "informativo", "emocional", "visual", "outro"];
 export const ROTULO_CATEGORIA_MOMENTO: Record<CategoriaMomento, string> = {

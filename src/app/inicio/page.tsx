@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ClipboardCheck, Clapperboard, Film, Send, Lightbulb, Upload, Search, ArrowRight } from "lucide-react";
+import { ClipboardCheck, Clapperboard, Film, Send, Lightbulb, Upload, Search, ArrowRight, Cpu } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useUser } from "@/lib/useUser";
-import { listarBrutos, listarProducaoProjetos, listarPublicacoes } from "@/lib/production/data";
+import { listarBrutos, listarProducaoProjetos, listarPublicacoes, listarJobsRecentes, listarWorkers } from "@/lib/production/data";
+import { estadoDoWorker } from "@/lib/production/worker";
 import { ROTULO_STATUS_CLIP, ROTULO_STATUS_PROJETO, ROTULO_PLATAFORMA } from "@/lib/production/rotulos";
 import type { Bruto, Clip, ProducaoProjeto, Publicacao } from "@/lib/production/types";
 import { useMarca } from "@/components/marca/MarcaProvider";
@@ -50,9 +51,18 @@ export default function InicioPage() {
   const [producoes, setProducoes] = useState<ProducaoProjeto[]>([]);
   const [brutos, setBrutos] = useState<Bruto[]>([]);
   const [publicacoes, setPublicacoes] = useState<Publicacao[]>([]);
+  const [fila, setFila] = useState<{ esperando: number; falhou: number; vistoEm: string | null } | null>(null);
 
   const carregar = useCallback(async () => {
     if (!user) return;
+    // Fila do worker (0033): some sem aviso se a migration ainda nao rodou.
+    Promise.all([listarJobsRecentes(user.id, 100), listarWorkers(user.id)])
+      .then(([j, w]) => setFila({
+        esperando: j.filter((x) => x.status === "queued" || x.status === "processing").length,
+        falhou: j.filter((x) => x.status === "failed").length,
+        vistoEm: w[0]?.visto_em ?? null,
+      }))
+      .catch(() => setFila(null));
     const [clips, projetos, b, pubs] = await Promise.all([
       supabaseBrowser().from("producao_clips").select("*, producao_projetos(*)").eq("user_id", user.id)
         .in("status", ["queued", "review"]).is("excluido_em", null).order("created_at", { ascending: false }).limit(30),
@@ -81,6 +91,15 @@ export default function InicioPage() {
         <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">Visão geral · {marca === "todas" ? "todas as marcas" : nomeMarca(marca)}</p>
         <h1 className="text-xl font-semibold text-neutral-100">O que pede você agora</h1>
       </header>
+
+      {fila && (fila.falhou > 0 || (fila.esperando > 0 && !estadoDoWorker(fila.vistoEm, Date.now()).ligado)) && (
+        <Link href="/sistema/jobs" className="mb-4 flex items-center gap-2 border-l-2 border-[#F0997B] bg-[#F0997B0D] px-3 py-2 text-xs text-[#F0997B] hover:bg-[#F0997B1A]">
+          <Cpu className="h-3.5 w-3.5 shrink-0" />
+          {fila.falhou > 0 && `${fila.falhou} job(s) falharam. `}
+          {fila.esperando > 0 && !estadoDoWorker(fila.vistoEm, Date.now()).ligado && `${fila.esperando} esperando o PC: ${estadoDoWorker(fila.vistoEm, Date.now()).texto.toLowerCase()}.`}
+          <ArrowRight className="ml-auto h-3 w-3" />
+        </Link>
+      )}
 
       <div className="mb-6 flex flex-wrap gap-2">
         <Link href="/inspiracoes" className="flex min-h-[40px] items-center gap-2 rounded-md border border-neutral-800 px-3 text-xs text-neutral-300 hover:border-teal-500/30 hover:text-teal-200"><Lightbulb className="h-3.5 w-3.5" /> Guardar referência</Link>

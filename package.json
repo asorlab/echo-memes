@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "test": "node --import ./scripts/testes/_registrar.mjs --test scripts/testes/*.test.mjs",
-    "import-memes": "node scripts/import-memes.mjs"
+    "import-memes": "node scripts/import-memes.mjs",
+    "worker:producao": "node scripts/echo-worker.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

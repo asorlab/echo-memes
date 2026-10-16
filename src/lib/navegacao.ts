@@ -32,7 +32,12 @@ export const GRUPOS_NAV: GrupoNav[] = [
     ],
   },
   { id: "inteligencia", rotulo: "Inteligência", itens: [{ id: "analytics", nome: "Analytics", href: "/analytics" }] },
-  { id: "sistema", rotulo: "Sistema", itens: [{ id: "lixeira", nome: "Lixeira", href: "/lixeira" }] },
+  {
+    id: "sistema", rotulo: "Sistema", itens: [
+      { id: "jobs", nome: "Jobs e worker", href: "/sistema/jobs" },
+      { id: "lixeira", nome: "Lixeira", href: "/lixeira" },
+    ],
+  },
 ];
 
 // Telas que de proposito nao ficam no menu.

@@ -3,7 +3,7 @@ import { colunaFaltando } from "@/lib/lixeiraConfig";
 import type {
   Bruto, ProducaoProjeto, Derivado, Transcricao, SegmentoTranscricao, Momento, Clip, Feedback,
   EditingDna, DnaRegra, DnaReferencia, LegendaPreset, DnaAutoEdit, EditDecision, BrollSugestao,
-  ProducaoJob, Publicacao, Metrica, Memoria,
+  ProducaoJob, Publicacao, Metrica, Memoria, Sessao, JobLog, WorkerStatus,
 } from "./types";
 
 const sb = () => supabaseBrowser();
@@ -54,6 +54,60 @@ export async function listarBrutosDoProjeto(projetoId: string): Promise<Bruto[]>
   const { data, error } = await sb().from("producao_projeto_brutos").select("bruto_id, producao_brutos(*)").eq("projeto_id", projetoId);
   if (error) throw error;
   return ((data ?? []) as unknown as { producao_brutos: Bruto }[]).map((r) => r.producao_brutos).filter((b) => b && !b.excluido_em);
+}
+
+// ---- Sessoes de gravacao (0033) ----
+export async function listarSessoes(userId: string): Promise<Sessao[]> {
+  const { data, error } = await sb().from("producao_sessoes").select("*").eq("user_id", userId).is("excluido_em", null).order("data", { ascending: false }).order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data as Sessao[]) ?? [];
+}
+export async function criarSessao(userId: string, patch: Partial<Sessao>): Promise<Sessao> {
+  const { data, error } = await sb().from("producao_sessoes").insert({ user_id: userId, nome: "Nova sessão", ...patch }).select().single();
+  if (error) throw error;
+  return data as Sessao;
+}
+export async function atualizarSessao(id: string, patch: Partial<Sessao>): Promise<void> {
+  const { error } = await sb().from("producao_sessoes").update(patch).eq("id", id);
+  if (error) throw error;
+}
+export async function excluirSessao(id: string): Promise<void> {
+  await moverParaLixeira("producao_sessoes", id);
+}
+export async function moverBrutoParaSessao(brutoId: string, sessaoId: string | null): Promise<void> {
+  const { error } = await sb().from("producao_brutos").update({ sessao_id: sessaoId }).eq("id", brutoId);
+  if (error) throw error;
+}
+
+// ---- Fila e worker (0033) ----
+export async function listarJobsRecentes(userId: string, limite = 60): Promise<ProducaoJob[]> {
+  const { data, error } = await sb().from("producao_jobs").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(limite);
+  if (error) throw error;
+  return (data as ProducaoJob[]) ?? [];
+}
+export async function listarLogsDoJob(jobId: string): Promise<JobLog[]> {
+  const { data, error } = await sb().from("producao_job_logs").select("*").eq("job_id", jobId).order("created_at");
+  if (error) throw error;
+  return (data as JobLog[]) ?? [];
+}
+export async function listarWorkers(userId: string): Promise<WorkerStatus[]> {
+  const { data, error } = await sb().from("producao_worker_status").select("*").eq("user_id", userId).order("visto_em", { ascending: false });
+  if (error) throw error;
+  return (data as WorkerStatus[]) ?? [];
+}
+// Falhou de vez: volta para a fila do zero (a pessoa decidiu tentar de novo).
+export async function tentarJobDeNovo(id: string): Promise<void> {
+  const { error } = await sb().from("producao_jobs").update({ status: "queued", tentativas: 0, proximo_em: new Date().toISOString(), erro_mensagem: null, finished_at: null, progresso: 0 }).eq("id", id);
+  if (error) throw error;
+}
+export async function cancelarJob(id: string): Promise<void> {
+  const { error } = await sb().from("producao_jobs").update({ status: "cancelled", finished_at: new Date().toISOString() }).eq("id", id).eq("status", "queued");
+  if (error) throw error;
+}
+export async function reprocessarBruto(userId: string, brutoId: string): Promise<void> {
+  const { error } = await sb().from("producao_jobs").insert({ user_id: userId, tipo: "ingest", status: "queued", referencia_tabela: "producao_brutos", referencia_id: brutoId, payload: { bruto_id: brutoId } });
+  if (error) throw error;
+  await atualizarBruto(brutoId, { status: "processando", erro_mensagem: null });
 }
 
 // ---- Projetos de producao ----

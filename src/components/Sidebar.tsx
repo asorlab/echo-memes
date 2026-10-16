@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Radio, Sparkles, LogOut, X, ChevronDown, AudioLines, ImageIcon, Compass, Lightbulb, Trash2, Rss, FolderKanban, Users,
-  Clapperboard, BarChart3, Dna, Type, Palette, BadgeCheck, ArrowUpRight, Home, Search, type LucideIcon,
+  Clapperboard, BarChart3, Dna, Type, Palette, BadgeCheck, ArrowUpRight, Home, Search, Cpu, type LucideIcon,
 } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { ECHO_OS_URL } from "@/lib/sistemas";
@@ -22,7 +22,7 @@ const OUTROS_SISTEMAS = [
 const ICONE: Record<string, LucideIcon> = {
   inicio: Home, production: Clapperboard, memes: Sparkles, audios: AudioLines, visuais: ImageIcon, fontes: Type,
   brand: BadgeCheck, paletas: Palette, contas: Rss, edicoes: Compass, inspiracoes: Lightbulb, refs: Users,
-  projetos: FolderKanban, "editing-dna": Dna, analytics: BarChart3, lixeira: Trash2,
+  projetos: FolderKanban, "editing-dna": Dna, analytics: BarChart3, lixeira: Trash2, jobs: Cpu,
 };
 const GRUPOS = GRUPOS_NAV;
 

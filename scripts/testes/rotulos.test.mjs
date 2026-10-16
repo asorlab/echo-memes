@@ -1,6 +1,7 @@
 // Todo valor do banco tem rotulo em pt-BR na tela (src/lib/production/rotulos.ts).
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import * as r from "../../src/lib/production/rotulos.ts";
 
 const pares = [
@@ -12,7 +13,17 @@ const pares = [
   ["TIPOS_PROJETO", "ROTULO_TIPO_PROJETO"],
   ["STATUS_PROJETO", "ROTULO_STATUS_PROJETO"],
   ["PLATAFORMAS", "ROTULO_PLATAFORMA"],
+  ["TIPOS_SESSAO", "ROTULO_TIPO_SESSAO"],
+  ["TIPOS_JOB", "ROTULO_TIPO_JOB"],
+  ["STATUS_JOB", "ROTULO_STATUS_JOB"],
+  ["STATUS_BRUTO", "ROTULO_STATUS_BRUTO"],
 ];
+
+test("tipos de sessao e de job batem com o check das migrations", () => {
+  const sql = readFileSync("supabase/migrations/0033_sessoes_e_fila.sql", "utf8");
+  for (const t of r.TIPOS_SESSAO) assert.ok(sql.includes(`'${t}'`), `sessao ${t}`);
+  for (const t of r.TIPOS_JOB) assert.ok(sql.includes(`'${t}'`), `job ${t}`);
+});
 
 test("cada valor tem rotulo, sem sobra", () => {
   for (const [lista, mapa] of pares) {
