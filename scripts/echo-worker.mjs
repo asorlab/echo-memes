@@ -21,9 +21,10 @@ import os from "node:os";
 import path from "node:path";
 import {
   ehVideo, arquivoEstavel, sessaoDoArquivo, planoProxy, filtroEscala, lerFfprobe, progressoDaLinha, mensagemSegura, LIMITE_PROXY_BYTES,
+  CODIFICADORES, codificadorPorId, planoDisco, tamanhoEstimadoProxy,
 } from "./worker/ingest-logica.mjs";
 
-const VERSAO = "fase2-1";
+const VERSAO = "fase2-2";
 const MODO_UNICO = process.argv.includes("--once");
 const INTERVALO_MS = 15_000;
 
@@ -80,11 +81,26 @@ function rodar(cmd, args, { aoLinha } = {}) {
   });
 }
 
-let encoderGpu = null;
-async function temNvenc() {
-  if (encoderGpu !== null) return encoderGpu;
-  try { encoderGpu = (await rodar("ffmpeg", ["-hide_banner", "-encoders"])).includes("h264_nvenc"); } catch { encoderGpu = false; }
-  return encoderGpu;
+// Testa cada codificador com 3 quadros pretos: o primeiro que funciona de verdade e o usado.
+let codificador = null;
+async function detectarCodificador() {
+  if (codificador) return codificador;
+  for (const c of CODIFICADORES) {
+    if (c.id === "libx264") break;
+    try {
+      await rodar("ffmpeg", ["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=black:s=320x240:d=0.2", "-frames:v", "3", ...c.args, "-f", "null", "-"]);
+      codificador = c;
+      log(`codificador de vídeo: ${c.rotulo} (${c.id})`);
+      return c;
+    } catch { /* placa ausente ou driver sem suporte: tenta o proximo */ }
+  }
+  codificador = codificadorPorId("libx264");
+  log("codificador de vídeo: processador (libx264)");
+  return codificador;
+}
+
+function espacoLivre(dir) {
+  try { const s = fs.statfsSync(dir); return Number(s.bavail) * Number(s.bsize); } catch { return Number.MAX_SAFE_INTEGER; }
 }
 
 function hashArquivo(caminho) {
@@ -215,8 +231,15 @@ async function ingest(job) {
   await sb.from("producao_brutos").update({ miniatura_url, sprite_url }).eq("id", brutoId);
   await hb(10);
 
-  // 3) proxy leve (fica no PC; vai para a nuvem se couber no limite do bucket)
+  // 3) proxy leve (vai para a nuvem se couber no limite do bucket; no PC so fica se o disco tiver folga)
   const plano = planoProxy(meta.duracao_seg);
+  const disco = planoDisco(espacoLivre(PASTA_PROXY), tamanhoEstimadoProxy(meta.duracao_seg, plano));
+  if (!disco.podeGerar) {
+    await fsp.rm(capa, { force: true }); await fsp.rm(tira, { force: true });
+    await sb.from("producao_brutos").update({ status: bruto.status === "em_projeto" ? "em_projeto" : "novo" }).eq("id", brutoId);
+    await registrarLog(job, "aviso", `${disco.motivo} Metadados e miniaturas foram feitos; o proxy fica para quando houver espaço (Preparar de novo).`);
+    return { proxy: "sem_espaco" };
+  }
   const proxy = path.join(PASTA_PROXY, `${brutoId}.mp4`);
   const base = ["-hide_banner", "-y", "-i", origem, "-vf", filtroEscala(meta.largura, meta.altura, plano.altura), "-r", String(Math.min(30, Math.round(meta.fps || 30)))];
   const taxa = ["-b:v", `${plano.videoKbps}k`, "-maxrate", `${Math.round(plano.videoKbps * 1.4)}k`, "-bufsize", `${plano.videoKbps * 2}k`];
@@ -227,15 +250,14 @@ async function ingest(job) {
     const p = progressoDaLinha(linha, meta.duracao_seg);
     if (p !== null && Date.now() - ultimo > 5000) { ultimo = Date.now(); hb(10 + Math.floor(p * 0.85)); }
   };
-  let encoder = (await temNvenc()) ? "h264_nvenc" : "libx264";
+  let enc = await detectarCodificador();
   try {
-    const enc = encoder === "h264_nvenc" ? ["-c:v", "h264_nvenc", "-preset", "p4"] : ["-c:v", "libx264", "-preset", "veryfast"];
-    await rodar("ffmpeg", [...base, ...enc, ...taxa, ...audio, ...fim], { aoLinha });
+    await rodar("ffmpeg", [...base, ...enc.args, ...taxa, ...audio, ...fim], { aoLinha });
   } catch (e) {
-    if (encoder !== "h264_nvenc") throw e;
-    await registrarLog(job, "aviso", "Placa de vídeo recusou o proxy; refazendo pelo processador (mais lento).");
-    encoder = "libx264";
-    await rodar("ffmpeg", [...base, "-c:v", "libx264", "-preset", "veryfast", ...taxa, ...audio, ...fim], { aoLinha });
+    if (enc.id === "libx264") throw e;
+    await registrarLog(job, "aviso", `A ${enc.rotulo} recusou este vídeo; refazendo pelo processador (mais lento).`);
+    enc = codificadorPorId("libx264");
+    await rodar("ffmpeg", [...base, ...enc.args, ...taxa, ...audio, ...fim], { aoLinha });
   }
   const tamanhoProxy = (await fsp.stat(proxy)).size;
   let proxy_url = null;
@@ -244,10 +266,14 @@ async function ingest(job) {
   } else {
     await registrarLog(job, "aviso", `Proxy ficou com ${Math.round(tamanhoProxy / 1e6)} MB, acima do limite da nuvem; ficou só no PC.`);
   }
+  // Disco apertado: com o proxy ja na nuvem, a copia local sai para nao lotar o PC.
+  let ficouNoPc = true;
+  if (proxy_url && disco.apagarLocal) { await fsp.rm(proxy, { force: true }); ficouNoPc = false; }
+  await fsp.rm(capa, { force: true }); await fsp.rm(tira, { force: true });
   const statusFinal = bruto.status === "em_projeto" ? "em_projeto" : "novo";
   await sb.from("producao_brutos").update({ proxy_url, status: statusFinal, erro_mensagem: null }).eq("id", brutoId);
-  await registrarLog(job, "info", `Proxy ${plano.altura}p (${encoder === "h264_nvenc" ? "placa de vídeo" : "processador"}), ${Math.round(tamanhoProxy / 1e6)} MB${proxy_url ? ", enviado para a nuvem" : ""}.`);
-  return { proxy_local: path.relative(PASTA, proxy), proxy_mb: Math.round(tamanhoProxy / 1e6), encoder, altura: plano.altura };
+  await registrarLog(job, "info", `Proxy ${plano.altura}p pela ${enc.rotulo}, ${Math.round(tamanhoProxy / 1e6)} MB${proxy_url ? ", enviado para a nuvem" : ""}${ficouNoPc ? "" : " (cópia do PC apagada: disco com pouco espaço)"}.`);
+  return { proxy_mb: Math.round(tamanhoProxy / 1e6), codificador: enc.id, altura: plano.altura, proxy_no_pc: ficouNoPc };
 }
 
 const EXECUTORES = { ingest };
@@ -280,7 +306,8 @@ async function principal() {
   log(`ECHO worker de produção ${VERSAO} | pasta: ${PASTA} | ${MODO_UNICO ? "uma rodada" : "contínuo"}`);
   for (;;) {
     try {
-      await sinalDeVida(userId, { gpu: await temNvenc() });
+      const c = await detectarCodificador();
+      await sinalDeVida(userId, { codificador: c.id, codificador_rotulo: c.rotulo, gpu: c.id !== "libx264", disco_livre_gb: Math.round(espacoLivre(PASTA) / 1024 ** 3 * 10) / 10 });
       await varrerPasta(userId);
       if (MODO_UNICO) { await new Promise((r) => setTimeout(r, 21_000)); await varrerPasta(userId); } // arquivo precisa de 2 varreduras
       await processarFila();

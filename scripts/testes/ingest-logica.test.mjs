@@ -63,6 +63,26 @@ test("le o ffprobe (duracao, resolucao, fps, audio, rotacao)", () => {
   assert.equal(L.lerFfprobe({}).duracao_seg, null);
 });
 
+test("disco: nunca deixa menos de 2 GB; com pouco espaco, o proxy nao fica no PC", () => {
+  const GB = 1024 ** 3;
+  const cheio = L.planoDisco(2.1 * GB, 0.5 * GB);
+  assert.equal(cheio.podeGerar, false);
+  assert.match(cheio.motivo, /Disco quase cheio: 2\.1 GB livres/);
+  const apertado = L.planoDisco(8 * GB, 0.4 * GB);
+  assert.deepEqual([apertado.podeGerar, apertado.apagarLocal], [true, true]);
+  const folgado = L.planoDisco(200 * GB, 0.4 * GB);
+  assert.deepEqual([folgado.podeGerar, folgado.apagarLocal], [true, false]);
+  const est = L.tamanhoEstimadoProxy(3600, L.planoProxy(3600));
+  assert.ok(est > 300e6 && est < L.LIMITE_PROXY_BYTES * 1.2, `${Math.round(est / 1e6)} MB`);
+});
+
+test("codificadores: processador e o ultimo recurso; rotulos sem travessao", () => {
+  assert.equal(L.CODIFICADORES.at(-1).id, "libx264");
+  assert.equal(L.codificadorPorId("nao_existe").id, "libx264");
+  assert.equal(L.codificadorPorId("h264_amf").rotulo, "placa AMD");
+  for (const c of L.CODIFICADORES) assert.ok(!/[–—]/.test(c.rotulo));
+});
+
 test("progresso do ffmpeg e mensagem segura", () => {
   assert.equal(L.progressoDaLinha("out_time_ms=30000000", 60), 50);
   assert.equal(L.progressoDaLinha("out_time_ms=999000000", 60), 99);

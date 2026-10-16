@@ -89,6 +89,37 @@ export function progressoDaLinha(linha, duracaoSeg) {
   return Math.max(0, Math.min(99, Math.floor((seg / duracaoSeg) * 100)));
 }
 
+// Codificadores de video na ordem de preferencia. O ffmpeg LISTA todos que foram compilados,
+// mesmo sem a placa; por isso o worker testa cada um de verdade antes de usar.
+export const CODIFICADORES = [
+  { id: "h264_nvenc", rotulo: "placa NVIDIA", args: ["-c:v", "h264_nvenc", "-preset", "p4"] },
+  { id: "h264_amf", rotulo: "placa AMD", args: ["-c:v", "h264_amf", "-usage", "transcoding", "-quality", "speed"] },
+  { id: "h264_qsv", rotulo: "placa Intel", args: ["-c:v", "h264_qsv", "-preset", "veryfast"] },
+  { id: "libx264", rotulo: "processador", args: ["-c:v", "libx264", "-preset", "veryfast"] },
+];
+
+export function codificadorPorId(id) {
+  return CODIFICADORES.find((c) => c.id === id) ?? CODIFICADORES[CODIFICADORES.length - 1];
+}
+
+const GB = 1024 ** 3;
+export const FOLGA_MINIMA_BYTES = 2 * GB;   // nunca deixar o disco com menos que isso
+export const DISCO_APERTADO_BYTES = 15 * GB; // abaixo disso, o proxy local some depois de ir para a nuvem
+
+// Pode gerar o proxy sem lotar o disco? E depois de enviar, a copia local deve ser apagada?
+// estimadoBytes: tamanho previsto do proxy (taxa x duracao).
+export function planoDisco(livreBytes, estimadoBytes) {
+  const sobra = livreBytes - estimadoBytes;
+  if (sobra < FOLGA_MINIMA_BYTES) {
+    return { podeGerar: false, apagarLocal: true, motivo: `Disco quase cheio: ${(livreBytes / GB).toFixed(1)} GB livres e o proxy precisa de ${(estimadoBytes / GB).toFixed(1)} GB com folga de ${FOLGA_MINIMA_BYTES / GB} GB.` };
+  }
+  return { podeGerar: true, apagarLocal: sobra < DISCO_APERTADO_BYTES, motivo: null };
+}
+
+export function tamanhoEstimadoProxy(duracaoSeg, plano) {
+  return Math.ceil(((plano.videoKbps + plano.audioKbps) * 1000 / 8) * Math.max(1, duracaoSeg) * 1.1);
+}
+
 // Mensagem curta e segura para a tela (sem caminho completo nem stack trace).
 export function mensagemSegura(erro) {
   const txt = String(erro?.message ?? erro ?? "erro desconhecido").split("\n").map((l) => l.trim()).filter(Boolean);

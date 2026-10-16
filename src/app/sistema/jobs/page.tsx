@@ -65,7 +65,14 @@ export default function JobsPage() {
           <Activity className="h-3.5 w-3.5" /> {estado.texto}
         </span>
         {worker && <span className="text-[11px] text-neutral-500">Pasta vigiada: <code className="text-neutral-400">{worker.pasta}</code></span>}
-        {worker?.detalhe && "gpu" in worker.detalhe && <span className="text-[11px] text-neutral-500">{worker.detalhe.gpu ? "Proxy pela placa de vídeo" : "Proxy pelo processador"}</span>}
+        {worker?.detalhe && typeof worker.detalhe.codificador_rotulo === "string" && (
+          <span className="text-[11px] text-neutral-500">Proxy pela {worker.detalhe.codificador_rotulo}</span>
+        )}
+        {worker?.detalhe && typeof worker.detalhe.disco_livre_gb === "number" && (
+          <span className={`text-[11px] ${worker.detalhe.disco_livre_gb < 15 ? "text-[#F0997B]" : "text-neutral-500"}`}>
+            Disco do PC: {worker.detalhe.disco_livre_gb} GB livres{worker.detalhe.disco_livre_gb < 15 ? " (pouco espaço: o proxy não fica no PC, só na nuvem)" : ""}
+          </span>
+        )}
         {!worker && <span className="text-[11px] text-neutral-500">No PC, na pasta do echo-memes: <code className="text-neutral-400">npm run worker:producao</code></span>}
       </section>
 
